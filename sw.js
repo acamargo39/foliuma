@@ -1,8 +1,8 @@
 // Foliuma — service worker: funciona offline e carrega rápido.
 // Ao publicar uma nova versão, aumente o número abaixo.
-const VERSION = 'foliuma-v1';
+const VERSION = 'foliuma-v2';
 const SHELL = ['./', './index.html', './config.js', './supabase-shim.js', './manifest.webmanifest',
-  './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/favicon.png'];
+  './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/favicon.png', './icons/favicon.svg', './icons/favicon.ico'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

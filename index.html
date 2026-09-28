@@ -11,7 +11,11 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Foliuma">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" type="image/png" href="icons/favicon.png">
+<link rel="icon" type="image/svg+xml" href="icons/favicon.svg">
+<link rel="icon" type="image/png" sizes="64x64" href="icons/favicon.png">
+<link rel="alternate icon" href="icons/favicon.ico">
+<meta property="og:title" content="Foliuma">
+<meta property="og:image" content="brand/foliuma-mark-1024.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -67,7 +71,8 @@ svg.i{width:17px;height:17px;flex:none;stroke:currentColor;fill:none;stroke-widt
 
 /* ---------- Rail ---------- */
 .brand{display:flex;align-items:center;gap:10px;padding:10px 10px 12px}
-.logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(140deg,#7C7CF2,#4C4CC9);color:#fff;display:grid;place-items:center;font-weight:800;font-size:15px;box-shadow:0 4px 10px -2px rgba(91,91,214,.5)}
+.logo{width:32px;height:32px;border-radius:9px;background:linear-gradient(150deg,#8383F7,#4545C0);display:grid;place-items:center;box-shadow:0 4px 10px -2px rgba(91,91,214,.5);flex:none}
+.logo svg{width:24px;height:24px;display:block}
 .brand b{font-size:16.5px;font-weight:700;letter-spacing:-.02em}
 .searchbtn{margin:0 4px 8px;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);background:var(--surface);border-radius:10px;color:var(--muted);text-align:left;box-shadow:var(--shadow-sm)}
 .searchbtn:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
@@ -786,7 +791,7 @@ mark{background:var(--mark);color:inherit;border-radius:3px}
 <body>
 <div class="app" id="app">
   <aside class="rail" id="rail" aria-label="Navegação">
-    <div class="brand"><div class="logo">F</div><b>Foliuma</b></div>
+    <div class="brand"><div class="logo" title="Foliuma"><svg viewBox="9 9 46 48" aria-hidden="true"><path d="M49 13C31 12 16 21 15.5 37.5c-.1 4 .8 7.6 2.5 10.5 3 1.6 6.6 2.4 10.5 2.2C44 49.3 52.5 34 49 13Z" fill="#fff"/><path d="M18.6 47.4C25.2 40 33.2 30.6 44.2 19.4" fill="none" stroke="#5656D2" stroke-width="2.8" stroke-linecap="round"/><path d="M27.6 37.6 35.2 38.1M27.6 37.6 26.3 30.2M34.1 30.4 40.8 30.9M34.1 30.4 33 24.6" fill="none" stroke="#5656D2" stroke-width="2" stroke-linecap="round" opacity=".55"/><path d="M18.6 47.4 12.2 53.8" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/></svg></div><b>Foliuma</b></div>
     <button class="searchbtn" id="openSearch"><svg class="i"><use href="#i-search"/></svg><span>Buscar</span><kbd>Ctrl K</kbd></button>
     <div class="railscroll" id="railScroll"></div>
     <div class="railfoot">

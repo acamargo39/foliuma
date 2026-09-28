@@ -245,7 +245,7 @@
       return;
     }
     var mode = 'in';
-    var ov2 = overlay('<header>Entrar no Foliuma</header><div class="body">' +
+    var ov2 = overlay('<header style="display:flex;align-items:center;gap:10px"><img src="icons/favicon.svg" width="30" height="30" alt="">Entrar no Foliuma</header><div class="body">' +
       '<div class="seg" style="margin-bottom:12px"><button class="on" data-m="in" type="button">Entrar</button><button data-m="up" type="button">Criar conta</button></div>' +
       '<input class="field" id="acName" placeholder="Seu nome" autocomplete="name" hidden>' +
       '<input class="field" id="acEmail" type="email" placeholder="E-mail" autocomplete="email">' +

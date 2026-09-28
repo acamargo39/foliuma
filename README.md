@@ -1,3 +1,5 @@
+<p align="center"><img src="brand/foliuma-logo.svg" alt="Foliuma" width="320"></p>
+
 # Foliuma
 
 Anotações no estilo OneNote, com tarefas, Kanban, calendário, cronômetro, comentários e sincronização online pelo **Supabase**. Funciona no navegador e pode ser **instalado no celular** como aplicativo (PWA), inclusive offline.
@@ -113,3 +115,17 @@ Abra `http://localhost:8080`. Abrir o `index.html` com duplo clique também func
 - **Assistente de IA:** fica desligado, porque ele usa o Claude de dentro do claude.ai. Para ter IA aqui seria preciso um pequeno servidor com uma chave de API (por exemplo, uma Edge Function do Supabase).
 - **Plano gratuito do Supabase:** 500 MB de banco e pausa do projeto após 1 semana sem uso (reative pelo painel com um clique). Páginas com muitas imagens e áudios ocupam mais espaço.
 - **Conflitos de edição:** se duas pessoas editarem a mesma página ao mesmo tempo, vale a última versão salva. O app avisa quando alguém muda a página que você está vendo.
+
+## Identidade visual
+
+A pasta `brand/` tem o logo em vários formatos:
+
+| Arquivo | Uso |
+|---|---|
+| `foliuma-logo.svg` / `.png` | Logo com nome, para fundos claros |
+| `foliuma-logo-dark.svg` / `.png` | Logo com nome, para fundos escuros |
+| `foliuma-mark.svg` / `foliuma-mark-1024.png` | Só o símbolo (ícone do app) |
+| `foliuma-mark-maskable.svg` | Símbolo com margem para ícones redondos do Android |
+| `foliuma-leaf.svg` / `foliuma-leaf-white.svg` | Só a folha, sem fundo, em índigo ou branca |
+
+Cores: índigo `#8383F7` → `#4545C0` (degradê), destaque `#5B5BD6`, texto `#151924`.
