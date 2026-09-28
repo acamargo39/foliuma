@@ -1,0 +1,17 @@
+{
+  "name": "Foliuma",
+  "short_name": "Foliuma",
+  "description": "Notas, tarefas, Kanban e calendário num só lugar, com sincronização online.",
+  "lang": "pt-BR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F2F3F7",
+  "theme_color": "#5B5BD6",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
