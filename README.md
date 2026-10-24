@@ -83,6 +83,35 @@ Depois de instalado, o Foliuma abre em tela cheia, funciona offline e sincroniza
 
 ---
 
+## Login e senha
+
+O Foliuma tem duas camadas de login, que podem ser usadas juntas:
+
+**1. Login da conta (Supabase)** — com o banco online configurado, o app só abre depois de entrar com e-mail e senha (`REQUIRE_LOGIN: true` no `config.js`; use `false` para permitir o uso sem conta). Na tela de entrada há **Esqueci minha senha**, que envia um link por e-mail para criar uma senha nova, e em **menu ⋯ → Conta e sincronização** há **Alterar senha**. Para o link de recuperação funcionar, o endereço do site precisa estar em **Authentication → URL Configuration** no Supabase.
+
+**2. Login do app (usuário e senha)** — funciona mesmo sem Supabase. Em **menu ⋯ → Criar login e senha**, escolha um usuário e uma senha. O app passa a pedir o login ao abrir, bloqueia sozinho após um tempo sem uso (5, 15, 30 ou 60 minutos) e pode ser bloqueado a qualquer momento pelo cadeado ao lado do logo ou por **Ctrl Shift L**. Ao criar, você recebe um **código de recuperação**: guarde-o, ele é a única forma de redefinir a senha se você esquecê-la. A senha nunca é salva em texto, apenas uma impressão criptográfica (PBKDF2-SHA256). Depois de 5 tentativas erradas, o app impõe uma pausa crescente.
+
+Observação: o login do app protege o acesso pela tela. Quem tiver acesso técnico ao aparelho ainda pode ler os dados guardados no navegador; para proteção total use a conta online com verificação em duas etapas.
+
+## Verificação em duas etapas (recomendado)
+
+Protege sua conta com um código do celular além da senha.
+
+**Configurar no Supabase (uma vez):**
+1. Rode de novo o `supabase/schema.sql` atualizado no **SQL Editor** (pode rodar por cima, não apaga dados). Ele cria a regra que exige o código no banco.
+2. Confira nas configurações de autenticação do Supabase (seção **Multi-Factor / MFA**) se o fator **TOTP** está habilitado. Ele vem ligado por padrão.
+
+**Ativar na sua conta:**
+1. No Foliuma, abra **menu ⋯ → Conta e sincronização → Verificação em duas etapas → Ativar**.
+2. Escaneie o QR code com um app autenticador (Google Authenticator, Microsoft Authenticator, Authy ou 1Password).
+3. Digite o código de 6 dígitos para confirmar.
+
+A partir daí, todo login pede o código. Guarde a **chave** mostrada na ativação em um lugar seguro: com ela você configura o código em outro celular.
+
+**Perdeu o celular?** O administrador do projeto remove a verificação do usuário no painel do Supabase (**Authentication → Users**, escolha o usuário e remova o fator MFA). Depois é só entrar com a senha e ativar de novo.
+
+Na mesma tela há o botão **Sair de todos os aparelhos**, que encerra a sessão em todos os celulares e computadores.
+
 ## Contas e compartilhamento
 
 - Cada pessoa cria sua conta pela tela **Entrar** do app (e-mail e senha, ou link de acesso por e-mail).

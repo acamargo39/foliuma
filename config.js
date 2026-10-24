@@ -6,5 +6,7 @@
 // "service_role".
 window.CADERNO_CONFIG = {
   SUPABASE_URL: 'https://SEU-PROJETO.supabase.co',
-  SUPABASE_ANON_KEY: 'COLE-AQUI-A-CHAVE-ANON-PUBLIC'
+  SUPABASE_ANON_KEY: 'COLE-AQUI-A-CHAVE-ANON-PUBLIC',
+  // true = só entra quem tiver conta (login e senha obrigatórios). false = permite usar sem conta.
+  REQUIRE_LOGIN: true
 };
