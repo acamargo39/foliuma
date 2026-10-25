@@ -4022,16 +4022,25 @@ async function importOneNote(){
   if(r.data.dest==='new'){ nb=curNb(); if(!nb||(nb.shared&&!canWriteShared)) nb=tree.notebooks[0]; if(!nb){ nb={id:uid(),name:'Meu caderno',color:NB_COLORS[0],sections:[]}; tree.notebooks.push(nb); tree.openNb[nb.id]=true; }
     sec={id:uid(),name:r.data.newName,color:SEC_COLORS[nb.sections.length%SEC_COLORS.length],pages:[],created:Date.now()}; nb.sections.push(sec); }
   else { const f=findSection(r.data.dest); if(!f){ toast('Seção de destino não encontrada.'); return } sec=f.sec; nb=f.nb; }
-  const errors=[]; const created=[]; const now=Date.now();
+  const errors=[]; const created=[]; const now=Date.now(); let multiNb=null; const secByName={}; const MARK=/^⟦seção:(.+)⟧$/;
   for(let i=0;i<jobs.length;i++){ const j=jobs[i];
     if(jobs.length>1) toast(`Importando ${i+1} de ${jobs.length}…`);
     try{ const res=j.pasted?j:await readImportFile(j.file); const box=document.createElement('div'); box.innerHTML=res.html; tidyImport(box);
-      const chunks=splitImport(box,r.data.split,res.base,res.flt);
-      if(!chunks.length) throw new Error('O arquivo não tem conteúdo para importar.');
-      chunks.forEach(c=>{ const id=uid(); sec.pages.push({id,title:c.title,level:0,created:now,updated:now}); pageCache[id]={html:c.html||'<p><br></p>',strokes:[],paper:'plain',updatedAt:now}; created.push(id); });
+      const groups=[]; let g=null; Array.from(box.childNodes).forEach(n=>{ const m=n.nodeType===1&&n.tagName==='P'&&n.textContent.trim().match(MARK); if(m){ g={name:m[1].trim(),box:document.createElement('div')}; groups.push(g); return } if(!g){ g={name:null,box:document.createElement('div')}; groups.push(g); } g.box.appendChild(n); });
+      let any=0;
+      groups.forEach(gr=>{ const chunks=splitImport(gr.box,r.data.split,res.base,res.flt); if(!chunks.length)return;
+        let target=sec;
+        if(gr.name&&r.data.dest==='new'){ if(!multiNb){ multiNb={id:uid(),name:r.data.newName,color:NB_COLORS[tree.notebooks.length%NB_COLORS.length],sections:[],created:now}; tree.notebooks.push(multiNb); tree.openNb[multiNb.id]=true; }
+          target=secByName[gr.name]; if(!target){ target={id:uid(),name:gr.name.slice(0,60),color:SEC_COLORS[multiNb.sections.length%SEC_COLORS.length],pages:[],created:now}; multiNb.sections.push(target); secByName[gr.name]=target; } }
+        chunks.forEach(c=>{ const id=uid(); target.pages.push({id,title:c.title,level:0,created:now,updated:now}); pageCache[id]={html:c.html||'<p><br></p>',strokes:[],paper:'plain',updatedAt:now}; created.push(id); any++; }); });
+      if(!any) throw new Error('O arquivo não tem conteúdo para importar.');
     }catch(e){ errors.push(`${j.file?j.file.name:'Conteúdo colado'}: ${e&&e.message?e.message:'não foi possível ler.'}`); }
   }
-  if(created.length){ commit(nb); created.forEach(id=>savePage(id)); setTimeout(()=>fixOneNoteDates(),300); tree.cur={...tree.cur,nb:nb.id,sec:sec.id,page:created[0],view:'page'}; tree.openNb[nb.id]=true; saveTree(); renderAll(); }
+  if(multiNb&&r.data.dest==='new'&&!sec.pages.length){ nb.sections.splice(nb.sections.indexOf(sec),1); }
+  if(created.length){ commit(nb); if(multiNb) commit(multiNb); created.forEach(id=>savePage(id)); setTimeout(()=>fixOneNoteDates(),300);
+    const firstSec=multiNb&&!sec.pages.length?multiNb.sections[0]:sec; const firstNb=multiNb&&!sec.pages.length?multiNb:nb;
+    tree.cur={...tree.cur,nb:firstNb.id,sec:firstSec.id,page:firstSec.pages[0]?firstSec.pages[0].id:created[0],view:'page'}; tree.openNb[firstNb.id]=true; saveTree(); renderAll();
+    if(multiNb){ toast(`Caderno “${multiNb.name}” criado com ${multiNb.sections.length} seção(ões) e ${created.length} página(s).`); return } }
   else if(r.data.dest==='new'){ nb.sections.splice(nb.sections.indexOf(sec),1); saveTree(); }
   if(errors.length) modal({title:created.length?'Importação concluída com avisos':'Não foi possível importar',body:`${created.length?`<p>${created.length} página(s) importada(s) para “${esc(sec.name)}”.</p>`:''}<p>Estes itens não foram importados:</p><ul class="steps">${errors.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`,actions:[{label:'Entendi',primary:true}]});
   else toast(`${created.length} página(s) importada(s) para “${sec.name}”.`);
