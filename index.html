@@ -984,7 +984,7 @@ body:has(.ai.show) .fab,body:has(.overlay.show) .fab,body:has(.recorder.show) .f
     </header>
     <div class="work">
       <section class="pages" id="pagesCol" aria-label="Páginas">
-        <div class="pghead"><h2 id="secName"></h2><button class="iconbtn" id="secMore" title="Opções da seção"><svg class="i"><use href="#i-dots"/></svg></button></div>
+        <div class="pghead"><h2 id="secName"></h2><button class="iconbtn" id="pgSort" title="Ordenar páginas e seções"><svg class="i"><use href="#i-sort"/></svg></button><button class="iconbtn" id="secMore" title="Opções da seção"><svg class="i"><use href="#i-dots"/></svg></button></div>
         <div class="pgtools"><input class="pgfilter" id="pgFilter" placeholder="Filtrar páginas" aria-label="Filtrar páginas"><button class="newpage" id="newPageBtn" title="Nova página (Alt N)"><svg class="i"><use href="#i-plus"/></svg>Nova</button></div>
         <div class="pglist" id="pgList"></div>
       </section>
@@ -1070,6 +1070,7 @@ body:has(.ai.show) .fab,body:has(.overlay.show) .fab,body:has(.recorder.show) .f
   <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
   <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
   <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 6.1A9.6 9.6 0 0 1 12 6c5 0 8.5 4 9.5 6-.4.8-1.2 2-2.3 3.1M6.3 7.4C4.4 8.7 3.1 10.5 2.5 12c1 2 4.5 6 9.5 6 1.6 0 3-.4 4.3-1M9.9 10a3 3 0 0 0 4.2 4.2"/></symbol>
+  <symbol id="i-sort" viewBox="0 0 24 24"><path d="M7 4v16M4 17l3 3 3-3M17 20V4M14 7l3-3 3 3"/></symbol>
   <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M20 16l-5-5-8 8"/></symbol>
 </svg>
 
@@ -1163,16 +1164,16 @@ function seed(){
     {id:uid(),name:'Estudos',color:SEC_COLORS[3],pages:[]}
   ]};
   const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);tomorrow.setHours(9,0,0,0);
-  pageCache[p1]={html:WELCOME,strokes:[],paper:'plain',updatedAt:now};
-  pageCache[p2]={html:`<ul class="checklist"><li data-checked="false" data-due="${tomorrow.getTime()}" data-due-label="${dueLabel(tomorrow.getTime())}">Revisar anotações da reunião</li><li data-checked="false">Enviar orçamento</li><li data-checked="true">Organizar cadernos</li></ul><p><br></p>`,strokes:[],paper:'ruled',updatedAt:now};
-  pageCache[p3]={html:'<p>Escreva livremente aqui. Experimente o modo de desenho para rabiscar diagramas.</p><p><br></p>',strokes:[],paper:'dots',updatedAt:now};
+  pageCache[p1]={html:WELCOME,strokes:[],paper:'plain',updatedAt:now,seed:true};
+  pageCache[p2]={html:`<ul class="checklist"><li data-checked="false" data-due="${tomorrow.getTime()}" data-due-label="${dueLabel(tomorrow.getTime())}">Revisar anotações da reunião</li><li data-checked="false">Enviar orçamento</li><li data-checked="true">Organizar cadernos</li></ul><p><br></p>`,strokes:[],paper:'ruled',updatedAt:now,seed:true};
+  pageCache[p3]={html:'<p>Escreva livremente aqui. Experimente o modo de desenho para rabiscar diagramas.</p><p><br></p>',strokes:[],paper:'dots',updatedAt:now,seed:true};
   [p1,p2,p3].forEach(id=>lsSet('p:'+id,pageCache[id]));
-  return {v:2,updatedAt:now,notebooks:[nb],trash:[],settings:{theme:'auto',recent:[p1],notified:[]},
+  return {v:2,updatedAt:now,seedIds:[p1,p2,p3],seedAt:now,notebooks:[nb],trash:[],settings:{theme:'auto',recent:[p1],notified:[]},
     cur:{nb:nb.id,sec:nb.sections[0].id,page:p1,view:'home'},openNb:{[nb.id]:true}};
 }
 let tree=lsGet('tree');
 if(!tree||!Array.isArray(tree.notebooks)){tree=seed();lsSet('tree',tree)}
-function normTree(){ tree.trash=tree.trash||[]; tree.settings=tree.settings||{theme:'auto'}; tree.settings.recent=tree.settings.recent||[]; tree.settings.notified=tree.settings.notified||[]; tree.openNb=tree.openNb||{}; tree.cur=tree.cur||{view:'home'}; if(!tree.cur.view)tree.cur.view='page'; }
+function normTree(){ tree.trash=tree.trash||[]; tree.deleted=tree.deleted||[]; tree.settings=tree.settings||{theme:'auto'}; tree.settings.recent=tree.settings.recent||[]; tree.settings.notified=tree.settings.notified||[]; tree.openNb=tree.openNb||{}; tree.cur=tree.cur||{view:'home'}; if(!tree.cur.view)tree.cur.view='page'; }
 normTree();
 syncTags();
 
@@ -1205,10 +1206,10 @@ async function flush(){
   flushing=true; const items=[...pending]; pending.clear();
   for(const [path,get] of items){
     inflight.add(path); setSync();
-    try{ const v=typeof get==='function'?get():get; if(v===null) await db.doc(path).delete(); else if(v!==undefined) await db.doc(path).set(clone(v)); }
+    try{ const v=typeof get==='function'?get():get; if(v===null) await deleteDoc(path); else if(v!==undefined) await writeDoc(path,v); syncFailed.delete(path); }
     catch(e){ const c=e&&e.code;
       if(c==='invalid_argument'&&path.startsWith('shared')){ canWriteShared=false; toast('Você tem acesso somente de leitura aos cadernos compartilhados.'); }
-      else if(c==='invalid_argument') toast('Esta página ficou grande demais para sincronizar (talvez por imagens). Ela continua salva neste navegador.');
+      else if(c==='invalid_argument'){ syncFailed.add(path); } if(c==='invalid_argument'&&!path.startsWith('shared')) toast('Esta página ficou grande demais para sincronizar (talvez por imagens). Ela continua salva neste navegador.');
       else if(c==='quota_exceeded') toast('Limite de armazenamento atingido. Esvazie a lixeira para liberar espaço.');
       else if(c==='unavailable'||c==='resource_exhausted'){ if(!pending.has(path))pending.set(path,get); clearTimeout(flushT); flushT=setTimeout(flush,3000+Math.random()*2000); }
       else if(c==='revoked'){ remoteOk=false; }
@@ -1224,7 +1225,7 @@ function commit(nb){ if(nb&&nb.shared) writeNb(nb); saveTree(); }
 const saveTreeDeb=debounce(saveTree,500);
 function pagePathFor(pid){ const f=findPage(pid); if(f&&f.nb.shared) return 'sharedpg/p_'+pid; return viewerId?userPath('p_'+pid):null; }
 function savePage(id){
-  const p=getPage(id); p.updatedAt=Date.now(); p.updatedBy=viewerId||null;
+  const p=getPage(id); p.updatedAt=Date.now(); p.updatedBy=viewerId||null; { const ff=findPage(id); if(ff) p.title=ff.page.title||''; }
   if(!lsSet('p:'+id,p)&&!remoteOk) toast('O armazenamento do navegador está cheio. Remova imagens grandes ou faça um backup.');
   const f=findPage(id); if(f) f.page.updated=p.updatedAt;
   const path=pagePathFor(id); if(path) queue(path,()=>getPage(id));
@@ -1244,19 +1245,21 @@ async function initRemote(){
     const snap=await db.collection('data/users/'+id).limit(1000).get();
     const remote={}; snap.docs.forEach(doc=>{remote[doc.id]=doc.data()});
     let changed=false;
-    if(remote.tree&&Array.isArray(remote.tree.notebooks)&&(remote.tree.updatedAt||0)>(tree.updatedAt||0)){
+    if(remote.tree&&Array.isArray(remote.tree.notebooks)&&isPristineSeed()){ backupTree('modelo inicial'); tree=remote.tree; normTree(); syncTags(); applyTheme(); fixCur(); lsSet('tree',tree); changed=true; }
+    else if(remote.tree&&Array.isArray(remote.tree.notebooks)){ const mg=mergeTrees(tree,remote.tree); if(mg.changedLocal){ backupTree('mesclagem'); const keepCur=tree.cur; tree=mg.tree; normTree(); syncTags(); applyTheme(); tree.cur=keepCur; fixCur(); lsSet('tree',tree); changed=true; } if(mg.changedRemote) setTimeout(()=>queue(userPath('tree'),()=>tree),0); }
+    if(false){
       const keepCur=tree.cur; tree=remote.tree; normTree(); syncTags(); applyTheme(); tree.cur=keepCur; lsSet('tree',tree); changed=true;
     }
     remoteOk=true;
     if(remote.links&&Array.isArray(remote.links.list)&&(remote.links.updatedAt||0)>(linksData.updatedAt||0)){ linksData=remote.links; lsSet('links',linksData); } else if(linksData.list.length&&(!remote.links||(remote.links.updatedAt||0)<(linksData.updatedAt||0))) queue(userPath('links'),()=>linksData);
     if(remote.templates&&Array.isArray(remote.templates.list)&&(remote.templates.updatedAt||0)>(userTpls.updatedAt||0)){ userTpls=remote.templates; lsSet('tpls',userTpls); } else if(userTpls.list.length&&(!remote.templates||(remote.templates.updatedAt||0)<(userTpls.updatedAt||0))) queue(userPath('templates'),()=>userTpls);
-    Object.keys(remote).forEach(k=>{ if(!k.startsWith('p_'))return; const pid=k.slice(2), r=remote[k], l=getPage(pid);
+    Object.keys(remote).forEach(k=>{ if(!k.startsWith('p_')||/__c\d+$/.test(k))return; if(remote[k]&&remote[k].chunked) chunkMeta[userPath(k)]=remote[k].chunked; const pid=k.slice(2), r=assembleFromMap(remote,k), l=getPage(pid); if(!r)return;
       if((r.updatedAt||0)>(l.updatedAt||0)){pageCache[pid]=r;lsSet('p:'+pid,r);changed=true} });
     if(!remote.tree||(remote.tree.updatedAt||0)<(tree.updatedAt||0)) queue(userPath('tree'),()=>tree);
     const priv=[]; tree.notebooks.forEach(nb=>nb.sections.forEach(s=>s.pages.forEach(p=>priv.push(p.id)))); tree.trash.forEach(t=>priv.push(t.page.id));
     priv.forEach(pid=>{const l=getPage(pid),r=remote['p_'+pid]; if(l.updatedAt&&(!r||(l.updatedAt||0)>(r.updatedAt||0))) queue(userPath('p_'+pid),()=>getPage(pid))});
     if(changed){ fixCur(); renderAll(); } else { renderRail(); }
-    timerRefresh(); checkAuthGate();
+    timerRefresh(); checkAuthGate(); setTimeout(()=>fixOneNoteDates(),800);
     setSync();
     listenShared(); listenMentions();
     initRoom();
@@ -1277,8 +1280,9 @@ function listenShared(){
   },()=>{});
   db.collection('sharedpg').onSnapshot(snap=>{
     let touched=false;
-    snap.docChanges().forEach(ch=>{ if(ch.type==='removed')return; const pid=ch.doc.id.slice(2); if(isDirty('sharedpg/'+ch.doc.id))return;
+    snap.docChanges().forEach(ch=>{ if(ch.type==='removed'||/__c\d+$/.test(ch.doc.id))return; const pid=ch.doc.id.slice(2); if(isDirty('sharedpg/'+ch.doc.id))return;
       const r=ch.doc.data(); const l=pageCache[pid];
+      if(r&&r.chunked){ chunkMeta['sharedpg/'+ch.doc.id]=r.chunked; if(!l||(r.updatedAt||0)>(l.updatedAt||0)) fetchChunked('sharedpg/'+ch.doc.id,r).then(full=>{ if(!full)return; const l2=pageCache[pid]; if(l2&&(full.updatedAt||0)<=(l2.updatedAt||0))return; pageCache[pid]=full; lsSet('p:'+pid,full); if(pid===tree.cur.page&&tree.cur.view==='page') onRemotePage(pid,full); renderPagesLight(); }); return; }
       if(!l||(r.updatedAt||0)>(l.updatedAt||0)){ pageCache[pid]=r; lsSet('p:'+pid,r); touched=true; if(pid===tree.cur.page&&tree.cur.view==='page') onRemotePage(pid,r); if(editor) editor.querySelectorAll('.sync').forEach(x=>{ if(x.dataset.syncPage===pid) hydrateSync(x) }); }
     });
     if(touched){ renderRailLight(); renderPagesLight(); if(tree.cur.view!=='page') renderEditorLight(); }
@@ -1334,11 +1338,11 @@ function renderRail(){
   if(recent.length&&!rc.hideRec) h+=secHead('rec','Recentes',rc.colRec)+(rc.colRec?'':recent.map(f=>`<button class="ritem" data-open="${f.page.id}"><span class="ico">${f.page.icon?esc(f.page.icon):icon('clock')}</span><span class="grow">${esc(f.page.title||'Sem título')}</span></button>`).join(''));
   const nbRow=nb=>{ const on=nb.id===tree.cur.nb, open=tree.openNb[nb.id]!==false&&on;
     let s=`<button class="ritem ${on&&v==='page'?'on':''}" data-nb="${nb.id}"><span class="nbsw" style="background:${nb.color}"></span><span class="grow">${esc(nb.name)}</span>${nb.shared?`<span title="Compartilhado" style="color:var(--faint);display:inline-grid">${icon('users')}</span>`:''}<span class="iconbtn" data-nbmenu="${nb.id}" role="button" aria-label="Opções do caderno" style="width:24px;height:24px">${icon('dots')}</span></button>`;
-    if(open) s+=`<div class="subsecs">`+nb.sections.map(sec=>`<button class="ritem ${sec.id===tree.cur.sec&&v==='page'?'on':''}" data-sec="${sec.id}"><span class="secdot" style="background:${sec.color}"></span><span class="grow">${esc(sec.name)}</span><span class="mini">${sec.pages.length}</span></button>`).join('')+`</div>`;
+    if(open) s+=`<div class="subsecs">`+sortedSections(nb).map(sec=>`<button class="ritem ${sec.id===tree.cur.sec&&v==='page'?'on':''}" data-sec="${sec.id}"><span class="secdot" style="background:${sec.color}"></span><span class="grow">${esc(sec.name)}</span><span class="mini">${sec.pages.length}</span></button>`).join('')+`</div>`;
     return s; };
   if(!rc.hideNb){
     h+=`<div class="rhead"><button class="rsec ${rc.colNb?'closed':''}" data-rcol="nb" aria-expanded="${!rc.colNb}" title="${rc.colNb?'Expandir':'Recolher'}">${icon('chev')}Meus cadernos</button><span style="display:flex;align-items:center"><button class="iconbtn rhide" data-rhide="nb" title="Ocultar Meus cadernos" aria-label="Ocultar Meus cadernos">${icon('eyeoff')}</button><button class="iconbtn" data-act="newNb" title="Novo caderno" style="width:24px;height:24px">${icon('plus')}</button></span></div>`;
-    if(!rc.colNb) h+=tree.notebooks.map(nbRow).join('')||`<p class="hint">Nenhum caderno ainda.</p>`;
+    if(!rc.colNb) h+=sortedNotebooks(tree.notebooks).map(nbRow).join('')||`<p class="hint">Nenhum caderno ainda.</p>`;
   }
   const sh=Object.values(sharedNbs);
   h+=`<div class="rhead">Compartilhados</div>`;
@@ -1373,6 +1377,7 @@ function railMenu(anchor){ const rc=railCfg(); const tog=k=>{ rc[k]=!rc[k]; save
   showMenu(anchor,[{type:'label',label:'Páginas do menu (Início fica sempre)'},
     ...RAIL_VIEWS.map(([k,l,ic])=>({label:l,icon:ic,k:hv[k]?'oculta':'',checked:!hv[k],action:()=>togView(k)})),
     {label:allHidden?'Mostrar todas as páginas':'Ocultar todas, menos Início',icon:'eyeoff',action:()=>{ if(allHidden) rc.hideViews={}; else { rc.hideViews={}; RAIL_VIEWS.forEach(([k])=>rc.hideViews[k]=true); } saveTree(); renderRail(); toast(allHidden?'Todas as páginas voltaram ao menu.':'Páginas ocultas. Elas continuam acessíveis pela busca (Ctrl K) e pelo botão de ajustes.'); }},
+    {sep:true},...sortMenuItems('notebooks','Ordenar cadernos por',true),
     {sep:true},{type:'label',label:'Seções'},
     {label:'Favoritos',icon:'spark',k:rc.hideFav?'oculto':'visível',checked:!rc.hideFav,action:()=>tog('hideFav')},
     {label:'Recentes',icon:'clock',k:rc.hideRec?'oculto':'visível',checked:!rc.hideRec,action:()=>tog('hideRec')},
@@ -1381,6 +1386,7 @@ function railMenu(anchor){ const rc=railCfg(); const tog=k=>{ rc[k]=!rc[k]; save
     {label:(rc.colFav&&rc.colRec&&rc.colNb)?'Expandir seções':'Recolher seções',icon:'chev',disabled:rc.hideFav&&rc.hideRec&&rc.hideNb,action:()=>{ const v=!(rc.colFav&&rc.colRec&&rc.colNb); rc.colFav=v; rc.colRec=v; rc.colNb=v; saveTree(); renderRail(); }},
     {label:'Mostrar tudo',disabled:!rc.hideFav&&!rc.hideRec&&!rc.hideNb&&!rc.colFav&&!rc.colRec&&!rc.colNb&&!anyHidden,action:()=>{ delete tree.settings.rail; saveTree(); renderRail(); }}]); }
 $('#railCustom').addEventListener('click',e=>railMenu(e.currentTarget));
+setTimeout(()=>{ const b=$('#pgSort'); if(b) b.addEventListener('click',e=>pagesSortMenu(e.currentTarget)); },0);
 
 /* ================= Tabs ================= */
 const VIEW_NAMES={links:'Links',today:'Hoje',activities:'Atividades',reports:'Relatórios',calendar:'Calendário',home:'Início',tasks:'Tarefas',reminders:'Lembretes',tags:'Tags',trash:'Lixeira'};
@@ -1388,7 +1394,7 @@ function renderTabs(){
   const nb=curNb(), t=$('#tabs');
   if(tree.cur.view!=='page'){ t.innerHTML=`<div class="crumb">${esc(VIEW_NAMES[tree.cur.view]||'')}</div>`; return }
   if(!nb){t.innerHTML='';return}
-  t.innerHTML=nb.sections.map(s=>`<button class="tab ${s.id===tree.cur.sec?'on':''}" style="--c:${s.color}" data-tab="${s.id}" title="${esc(s.name)} — clique duplo para renomear"><i></i><span>${esc(s.name)}</span></button>`).join('')+`<button class="addtab" id="addSec" title="Nova seção">${icon('plus')}</button>`+(nb.shared?`<span class="sharedchip" style="margin-left:6px">${icon('users')}Compartilhado</span>`:'');
+  t.innerHTML=sortedSections(nb).map(s=>`<button class="tab ${s.id===tree.cur.sec?'on':''}" style="--c:${s.color}" data-tab="${s.id}" title="${esc(s.name)} — clique duplo para renomear"><i></i><span>${esc(s.name)}</span></button>`).join('')+`<button class="addtab" id="addSec" title="Nova seção">${icon('plus')}</button>`+(nb.shared?`<span class="sharedchip" style="margin-left:6px">${icon('users')}Compartilhado</span>`:'');
   const on=t.querySelector('.tab.on'); if(on) on.scrollIntoView({block:'nearest',inline:'nearest'});
 }
 const tabsEl=$('#tabs');
@@ -1409,15 +1415,17 @@ function renderPages(){
   $('#newPageBtn').hidden=false;
   col.style.setProperty('--c',s.color); $('#secName').innerHTML=`<span class="secdot" style="background:${s.color}"></span>${esc(s.name)}`;
   const q=norm(pgQuery);
-  const pages=q?s.pages.filter(p=>norm(p.title).includes(q)||norm(snippet(p.id,2000)).includes(q)):s.pages;
+  const sortedOn=sortCfg('pages').k!=='manual'; const base=sortedPages(s); refreshSortBtn();
+  const pages=q?base.filter(p=>norm(p.title).includes(q)||norm(snippet(p.id,2000)).includes(q)):base;
   list.innerHTML=pages.length?pages.map(p=>{ const sn=snippet(p.id);
-    return `<div class="pg lv${q?0:(p.level||0)} ${p.id===tree.cur.page?'on':''}" draggable="${q?'false':'true'}" data-pid="${p.id}"><span class="pic ${p.icon?'':'dot'}">${p.icon?esc(p.icon):''}</span><div class="body"><div class="t ${p.title?'':'untitled'}"><span>${esc(p.title||'Sem título')}</span>${p.fav?'<span class="star">★</span>':''}</div><div class="s">${pageListMeta(p)}${esc(fmtRel(p.updated||p.created))}${sn?' · '+esc(sn):''}</div></div><button class="iconbtn more" data-pmenu="${p.id}" title="Opções da página">${icon('dots')}</button></div>`}).join(''):`<p class="hint" style="padding:10px">${q?'Nenhuma página encontrada.':'Nenhuma página nesta seção ainda.'}</p>`;
+    return `<div class="pg lv${(q||sortedOn)?0:(p.level||0)} ${p.id===tree.cur.page?'on':''}" draggable="${(q||sortedOn)?'false':'true'}" data-pid="${p.id}"><span class="pic ${p.icon?'':'dot'}">${p.icon?esc(p.icon):''}</span><div class="body"><div class="t ${p.title?'':'untitled'}"><span>${esc(p.title||'Sem título')}</span>${p.fav?'<span class="star">★</span>':''}</div><div class="s">${pageListMeta(p)}${esc(pageDateLabel(p))}${sn?' · '+esc(sn):''}</div></div><button class="iconbtn more" data-pmenu="${p.id}" title="Opções da página">${icon('dots')}</button></div>`}).join(''):`<p class="hint" style="padding:10px">${q?'Nenhuma página encontrada.':'Nenhuma página nesta seção ainda.'}</p>`;
 }
 const renderPagesLight=debounce(()=>renderPages(),600);
 const pgList=$('#pgList');
 $('#pgFilter').addEventListener('input',e=>{pgQuery=e.target.value;renderPages()});
 pgList.addEventListener('click',e=>{const m=e.target.closest('[data-pmenu]');if(m){e.stopPropagation();pageMenu(m.dataset.pmenu,m);return}const r=e.target.closest('[data-pid]');if(r){openPage(r.dataset.pid);closeDrawers()}});
 pgList.addEventListener('contextmenu',e=>{const r=e.target.closest('[data-pid]');if(r){e.preventDefault();pageMenu(r.dataset.pid,null,e.clientX,e.clientY)}});
+pgList.addEventListener('mousedown',e=>{ if(sortCfg('pages').k!=='manual'&&e.target.closest('[data-pid]')&&e.detail===1){ /* arrastar só na ordem manual */ } });
 pgList.addEventListener('dragstart',e=>{const r=e.target.closest('[data-pid]');if(!r)return;dragPid=r.dataset.pid;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',dragPid)}catch(_){}});
 pgList.addEventListener('dragover',e=>{const r=e.target.closest('[data-pid]');if(!dragPid)return;e.preventDefault();$$('.pg.dragover').forEach(x=>x.classList.remove('dragover'));if(r)r.classList.add('dragover')});
 pgList.addEventListener('drop',e=>{e.preventDefault();const r=e.target.closest('[data-pid]');$$('.pg.dragover').forEach(x=>x.classList.remove('dragover'));if(!dragPid)return;const s=curSec();const from=s.pages.findIndex(p=>p.id===dragPid);if(from<0){dragPid=null;return}const [pg]=s.pages.splice(from,1);let to=r?s.pages.findIndex(p=>p.id===r.dataset.pid):s.pages.length;if(to<0)to=s.pages.length;s.pages.splice(to,0,pg);dragPid=null;commit(curNb());renderPages()});
@@ -1501,7 +1509,7 @@ function renderEditor(){
   if(!p){edwrap.innerHTML=emptyHTML('📝','Seção vazia',`Crie a primeira página de “${esc(s.name)}”.`,'Criar página','emptyPg');$('#emptyPg').onclick=()=>newPage();return}
   if(nb.shared&&!(pageCache[p.id]&&pageCache[p.id].updatedAt)&&db){
     edwrap.innerHTML=`<div class="scroller"><div class="empty"><p>Carregando página…</p></div></div>`;
-    const pid=p.id; db.doc('sharedpg/p_'+pid).get().then(d=>{ if(d.exists){pageCache[pid]=d.data();lsSet('p:'+pid,pageCache[pid])} else pageCache[pid]={html:'<p><br></p>',strokes:[],paper:'plain',updatedAt:1}; if(tree.cur.page===pid)renderEditor(); }).catch(()=>{});
+    const pid=p.id; db.doc('sharedpg/p_'+pid).get().then(async d=>{ if(d.exists){ const dd=await fetchChunked('sharedpg/p_'+pid,d.data()); pageCache[pid]=dd||{html:'<p><br></p>',strokes:[],paper:'plain',updatedAt:1}; lsSet('p:'+pid,pageCache[pid]) } else pageCache[pid]={html:'<p><br></p>',strokes:[],paper:'plain',updatedAt:1}; if(tree.cur.page===pid)renderEditor(); }).catch(()=>{});
     return;
   }
   const data=getPage(p.id), ro=!canEditPage(p.id), cov=(p.cover!=null&&COVERS[p.cover])?COVERS[p.cover]:null;
@@ -2129,8 +2137,8 @@ function newPage(opts={}){
   commit(nb); savePage(id); openPage(id);
   const t=$('#ptitle'); if(t&&!opts.title) t.focus(); else if(editor){editor.focus();caretAt(editor,false)}
 }
-async function newSection(){ const nb=curNb(); if(!nb)return; const name=await askText('Nova seção','','Nome da seção'); if(!name)return; const s={id:uid(),name,color:SEC_COLORS[nb.sections.length%SEC_COLORS.length],pages:[]}; nb.sections.push(s); tree.cur.sec=s.id; tree.cur.page=null; tree.cur.view='page'; commit(nb); renderAll(); }
-async function newNotebook(){ const name=await askText('Novo caderno','','Nome do caderno'); if(!name)return; const nb={id:uid(),name,color:NB_COLORS[tree.notebooks.length%NB_COLORS.length],sections:[{id:uid(),name:'Geral',color:SEC_COLORS[2],pages:[]}]}; tree.notebooks.push(nb); tree.openNb[nb.id]=true; tree.cur={...tree.cur,nb:nb.id,sec:nb.sections[0].id,page:null,view:'page'}; saveTree(); renderAll(); closeDrawers(); }
+async function newSection(){ const nb=curNb(); if(!nb)return; const name=await askText('Nova seção','','Nome da seção'); if(!name)return; const s={id:uid(),name,color:SEC_COLORS[nb.sections.length%SEC_COLORS.length],pages:[],created:Date.now()}; nb.sections.push(s); tree.cur.sec=s.id; tree.cur.page=null; tree.cur.view='page'; commit(nb); renderAll(); }
+async function newNotebook(){ const name=await askText('Novo caderno','','Nome do caderno'); if(!name)return; const nb={id:uid(),name,color:NB_COLORS[tree.notebooks.length%NB_COLORS.length],created:Date.now(),sections:[{id:uid(),name:'Geral',color:SEC_COLORS[2],pages:[],created:Date.now()}]}; tree.notebooks.push(nb); tree.openNb[nb.id]=true; tree.cur={...tree.cur,nb:nb.id,sec:nb.sections[0].id,page:null,view:'page'}; saveTree(); renderAll(); closeDrawers(); }
 async function renameSection(id){ const f=findSection(id); if(!f)return; const n=await askText('Renomear seção',f.sec.name); if(n){f.sec.name=n;commit(f.nb);renderAll()} }
 function toPrivateCopy(pid){ const d=getPage(pid); lsSet('p:'+pid,d); if(viewerId) queue(userPath('p_'+pid),()=>getPage(pid)); }
 function trashPage(page,sec,nb){ if(nb.shared){ toPrivateCopy(page.id); queue('sharedpg/p_'+page.id,null); } tree.trash.unshift({page:{...page},secId:sec.id,nbId:nb.id,secName:sec.name,nbName:nb.name,deletedAt:Date.now()}); tree.settings.recent=tree.settings.recent.filter(x=>x!==page.id); }
@@ -2208,7 +2216,7 @@ function secMenu(sid,anchor,x,y){
     {label:'Mover para a direita',disabled:i===nb.sections.length-1,action:()=>{nb.sections.splice(i,1);nb.sections.splice(i+1,0,s);commit(nb);renderAll()}},
     {sep:true},
     {label:'Exportar seção em PDF',disabled:!downloads,action:()=>exportPdf('section',sid)},
-    {label:'Excluir seção',danger:true,action:async()=>{ if(!await confirmBox('Excluir seção?',`As ${s.pages.length} página(s) de “${s.name}” vão para a lixeira.`,'Excluir',true))return; s.pages.forEach(p=>trashPage(p,s,nb)); nb.sections.splice(i,1); if(tree.cur.sec===sid){tree.cur.sec=nb.sections[0]?.id||null;tree.cur.page=null} commit(nb); fixCur(); renderAll(); }}],x,y);
+    {label:'Excluir seção',danger:true,action:async()=>{ if(!await confirmBox('Excluir seção?',`As ${s.pages.length} página(s) de “${s.name}” vão para a lixeira.`,'Excluir',true))return; s.pages.forEach(p=>trashPage(p,s,nb)); markDeleted([s.id]); nb.sections.splice(i,1); if(tree.cur.sec===sid){tree.cur.sec=nb.sections[0]?.id||null;tree.cur.page=null} commit(nb); fixCur(); renderAll(); }}],x,y);
 }
 function nbMenu(nid,anchor,x,y){
   const nb=notebooksAll().find(n=>n.id===nid); if(!nb)return; const i=tree.notebooks.indexOf(nb);
@@ -2221,7 +2229,7 @@ function nbMenu(nid,anchor,x,y){
     ...(nb.shared&&nb.createdBy===viewerId?[{label:'Tornar privado',action:()=>unshareNotebook(nb)}]:[]),
     ...(!nb.shared?[{label:'Mover para cima',disabled:i<=0,action:()=>{tree.notebooks.splice(i,1);tree.notebooks.splice(i-1,0,nb);saveTree();renderAll()}}]:[]),
     {label:'Excluir caderno',danger:true,action:async()=>{ const n=nb.sections.reduce((a,s)=>a+s.pages.length,0); if(!await confirmBox('Excluir caderno?',`“${nb.name}” será removido${nb.shared?' para todas as pessoas':''}. As ${n} página(s) vão para a sua lixeira.`,'Excluir',true))return;
-      nb.sections.forEach(s=>s.pages.forEach(p=>trashPage(p,s,nb)));
+      nb.sections.forEach(s=>s.pages.forEach(p=>trashPage(p,s,nb))); if(!nb.shared) markDeleted([nb.id,...nb.sections.map(s=>s.id)]);
       if(nb.shared){ delete sharedNbs[nb.id]; queue('sharednb/'+nb.id,null); } else tree.notebooks.splice(i,1);
       if(tree.cur.nb===nid){tree.cur.nb=notebooksAll()[0]?.id;tree.cur.sec=null;tree.cur.page=null} fixCur(); saveTree(); renderAll(); }}],x,y);
 }
@@ -2852,11 +2860,118 @@ function renderTrashView(){
     if(p){ const t=tree.trash[+p.dataset.purge]; if(await confirmBox('Excluir para sempre?',`“${t.page.title||'Sem título'}” não poderá ser recuperada.`,'Excluir',true)){ tree.trash.splice(tree.trash.indexOf(t),1); purge(t.page.id); saveTree(); renderAll(); } }
   });
 }
-function purge(pid){ delete pageCache[pid]; lsDel('p:'+pid); if(viewerId) queue(userPath('p_'+pid),null); }
+function purge(pid){ markDeleted([pid]); delete pageCache[pid]; lsDel('p:'+pid); if(viewerId) queue(userPath('p_'+pid),null); }
 
 
 
 
+
+/* ================= Sincronização segura ================= */
+function markDeleted(ids){ tree.deleted=tree.deleted||[]; const t=Date.now(); ids.forEach(id=>tree.deleted.push({id,t})); if(tree.deleted.length>3000) tree.deleted=tree.deleted.slice(-3000); }
+function treePageIds(T){ const ids=[]; (T.notebooks||[]).forEach(nb=>(nb.sections||[]).forEach(s=>(s.pages||[]).forEach(p=>ids.push(p.id)))); return ids; }
+function isPristineSeed(){ if(!tree.seedIds) return false; const ids=treePageIds(tree); if((tree.trash||[]).length||tree.notebooks.length!==1||ids.length!==tree.seedIds.length) return false; return ids.every(id=>tree.seedIds.includes(id)&&(getPage(id).updatedAt||0)<=(tree.seedAt||0)+2000); }
+async function backupTree(reason){ try{ const list=(await idb.get('treebak'))||[]; list.unshift({t:Date.now(),reason,tree:clone(tree)}); await idb.put('treebak',list.slice(0,5)); }catch(_){} }
+function structKey(T){ return JSON.stringify({n:(T.notebooks||[]).map(nb=>[nb.id,nb.name,(nb.sections||[]).map(s=>[s.id,(s.pages||[]).map(p=>p.id)])]),t:(T.trash||[]).map(x=>x.page.id)}); }
+function mergeTrees(L,R){
+  const remoteNewer=(R.updatedAt||0)>=(L.updatedAt||0); const base=clone(remoteNewer?R:L), other=remoteNewer?L:R;
+  base.notebooks=base.notebooks||[]; base.trash=base.trash||[];
+  const dead=new Set(); [...(L.deleted||[]),...(R.deleted||[])].forEach(d=>dead.add(d.id||d));
+  const seenDel=new Set(); base.deleted=[...(L.deleted||[]),...(R.deleted||[])].filter(d=>{ const k=(d.id||d)+'|'+(d.t||0); if(seenDel.has(k))return false; seenDel.add(k); return true; }).slice(-3000);
+  const trashed=new Set(base.trash.map(t=>t.page.id)); (other.trash||[]).forEach(t=>trashed.add(t.page.id));
+  const nbMap=new Map(), secMap=new Map(), pageIds=new Set(base.trash.map(t=>t.page.id));
+  base.notebooks.forEach(nb=>{ nbMap.set(nb.id,nb); nb.sections.forEach(s=>{ secMap.set(s.id,s); s.pages.forEach(p=>pageIds.add(p.id)); }); });
+  (other.notebooks||[]).forEach(onb=>{ if(dead.has(onb.id))return; let nb=nbMap.get(onb.id); const fresh=!nb;
+    if(fresh){ nb={...clone(onb),sections:[]}; }
+    (onb.sections||[]).forEach(os=>{ if(dead.has(os.id))return; let s=secMap.get(os.id); if(!s){ s={...clone(os),pages:[]}; nb.sections.push(s); secMap.set(s.id,s); }
+      (os.pages||[]).forEach(op=>{ if(pageIds.has(op.id)||dead.has(op.id)||(trashed.has(op.id)&&!remoteNewer))return; if(trashed.has(op.id))return; s.pages.push(clone(op)); pageIds.add(op.id); }); });
+    if(fresh&&nb.sections.length){ base.notebooks.push(nb); nbMap.set(nb.id,nb); } });
+  (other.trash||[]).forEach(t=>{ if(!pageIds.has(t.page.id)){ base.trash.push(clone(t)); pageIds.add(t.page.id); } });
+  base.updatedAt=Math.max(L.updatedAt||0,R.updatedAt||0);
+  const k=structKey(base); return {tree:base,changedLocal:k!==structKey(L),changedRemote:k!==structKey(R)};
+}
+/* páginas grandes: divide em partes para caber no limite de cada documento */
+const CHUNK=200000, chunkMeta={};
+const isPagePath=p=>/(^|\/)p_[^/]+$/.test(p)&&!/__c\d+$/.test(p);
+async function writeDoc(path,v){
+  if(!isPagePath(path)){ await db.doc(path).set(clone(v)); return }
+  const json=JSON.stringify(v), prev=chunkMeta[path]||0;
+  if(json.length<=240000){ await db.doc(path).set(JSON.parse(json)); for(let i=0;i<prev;i++) db.doc(path+'__c'+i).delete().catch(()=>{}); chunkMeta[path]=0; return }
+  const parts=[]; for(let i=0;i<json.length;i+=CHUNK) parts.push(json.slice(i,i+CHUNK));
+  for(let i=0;i<parts.length;i++) await db.doc(path+'__c'+i).set({part:parts[i],i,n:parts.length});
+  await db.doc(path).set({chunked:parts.length,updatedAt:v.updatedAt||Date.now(),updatedBy:v.updatedBy||null,title:v.title||'',kind:v.kind||null});
+  for(let i=parts.length;i<prev;i++) db.doc(path+'__c'+i).delete().catch(()=>{}); chunkMeta[path]=parts.length;
+}
+async function deleteDoc(path){ await db.doc(path).delete(); if(isPagePath(path)){ const n=chunkMeta[path]||0; for(let i=0;i<n;i++) db.doc(path+'__c'+i).delete().catch(()=>{}); chunkMeta[path]=0; } }
+function assembleFromMap(map,id){ const m=map[id]; if(!m||!m.chunked) return m; let s=''; for(let i=0;i<m.chunked;i++){ const c=map[id+'__c'+i]; if(!c||typeof c.part!=='string') return null; s+=c.part; } try{ return JSON.parse(s); }catch(_){ return null; } }
+async function fetchChunked(basePath,m){ if(!m||!m.chunked) return m; let s=''; for(let i=0;i<m.chunked;i++){ const d=await db.doc(basePath+'__c'+i).get(); if(!d.exists) return null; s+=d.data().part; } try{ return JSON.parse(s); }catch(_){ return null; } }
+/* datas originais do OneNote */
+const PT_MON={janeiro:0,fevereiro:1,marco:2,abril:3,maio:4,junho:5,julho:6,agosto:7,setembro:8,outubro:9,novembro:10,dezembro:11};
+function fixOneNoteDates(silent){
+  let n=0; allPages().forEach(({nb,page})=>{ if(page.onDate||(nb.shared&&!canWriteShared))return; const t=htmlText(getPage(page.id).html||'').slice(0,220);
+    const m=norm(t).match(/^(?:criada no onenote em\s*)?(?:[a-z-]+,\s*)?(\d{1,2}) de ([a-z]+) de (\d{4})(?:\s+(?:as\s+)?(\d{1,2}):(\d{2}))?/); if(!m)return;
+    const mo=PT_MON[m[2]]; if(mo==null)return; const d=new Date(+m[3],mo,+m[1],+(m[4]||0),+(m[5]||0)).getTime(); if(isNaN(d)||!(page.created-d>60000))return;
+    page.created=d; page.onDate=true; n++; if(nb.shared) writeNb(nb); });
+  if(n){ saveTree(); renderAll(); if(!silent) toast(`Data de criação de ${n} página(s) importada(s) do OneNote ajustada para a data original.`); }
+  return n;
+}
+/* diagnóstico e recuperação */
+async function recoverOrphans(){
+  const known=new Set([...treePageIds(tree),...(tree.trash||[]).map(t=>t.page.id)]); Object.values(sharedNbs).forEach(nb=>nb.sections.forEach(s=>s.pages.forEach(p=>known.add(p.id))));
+  const found={};
+  Object.keys(localStorage).forEach(k=>{ if(k.indexOf(LS+'p:')!==0)return; const id=k.slice((LS+'p:').length); if(known.has(id))return; const d=lsGet('p:'+id); if(d&&(d.html||d.board)) found[id]=d; });
+  if(remoteOk&&viewerId){ try{ const snap=await db.collection('data/users/'+viewerId).limit(1000).get(); const map={}; snap.docs.forEach(d=>map[d.id]=d.data());
+      Object.keys(map).forEach(k=>{ if(!k.startsWith('p_')||/__c\d+$/.test(k))return; const id=k.slice(2); if(known.has(id)||found[id])return; const d=assembleFromMap(map,k); if(d&&(d.html||d.board)) found[id]=d; }); }catch(_){} }
+  const SEEDRE=/(O (Caderno\+|Foliuma) funciona como o OneNote|Escreva livremente aqui\. Experimente o modo de desenho|Revisar anotações da reunião[\s\S]{0,120}Enviar orçamento)/; const seenTxt=new Set();
+  const ids=Object.keys(found).filter(id=>{ const d=found[id]; if(d.seed)return false; const t=htmlText(d.html||'').trim(); if(!d.board&&SEEDRE.test(t))return false; const key=(d.board?JSON.stringify(d.board):t).slice(0,2000); if(seenTxt.has(key))return false; seenTxt.add(key); return (d.board&&(d.board.cards||[]).length)||t; });
+  if(!ids.length){ toast('Nenhuma página perdida encontrada. Está tudo nos cadernos.'); return 0 }
+  let nb=tree.notebooks[0]; if(!nb){ nb={id:uid(),name:'Meu caderno',color:NB_COLORS[0],sections:[],created:Date.now()}; tree.notebooks.push(nb); }
+  let sec=nb.sections.find(s=>s.recovered); if(!sec){ sec={id:uid(),name:'Páginas recuperadas',color:'#E8590C',pages:[],recovered:true,created:Date.now()}; nb.sections.push(sec); }
+  ids.forEach(id=>{ const d=found[id]; pageCache[id]=d; lsSet('p:'+id,d); const first=(htmlText(d.html||'').split('\n').map(x=>x.trim()).find(Boolean)||'').slice(0,80);
+    sec.pages.push({id,title:d.title||(d.kind==='board'?'Quadro recuperado':first)||'Página recuperada',level:0,created:d.updatedAt||Date.now(),updated:d.updatedAt||Date.now(),icon:d.kind==='board'?'📋':null}); });
+  saveTree(); ids.forEach(id=>savePage(id)); tree.cur={...tree.cur,nb:nb.id,sec:sec.id,page:ids[0],view:'page'}; renderAll(); fixOneNoteDates(true);
+  toast(`${ids.length} página(s) recuperada(s) na seção “Páginas recuperadas”.`); return ids.length;
+}
+function pushEverything(){ if(!remoteOk||!viewerId){ toast('Este aparelho não está conectado a uma conta online.'); return } let n=0; treePageIds(tree).concat((tree.trash||[]).map(t=>t.page.id)).forEach(pid=>{ const path=pagePathFor(pid); if(path&&getPage(pid).updatedAt){ queue(path,()=>getPage(pid)); n++; } }); queue(userPath('tree'),()=>tree); toast(`Enviando ${n} página(s) e a estrutura dos cadernos para a conta…`); }
+function syncDialog(){
+  const pages=treePageIds(tree).length, pend=pending.size+inflight.size;
+  const online=remoteOk&&viewerId; const standalone=!!window.cadernoAccount;
+  modal({title:'Sincronização',body:`<div class="authbox"><span style="font-size:22px">${online?'☁️':'📴'}</span><div class="grow"><b>${online?'Sincronizando com a sua conta':'Este aparelho não está sincronizando'}</b><div class="mini">${online?`${pages} página(s) nos seus cadernos · ${pend?pend+' alteração(ões) aguardando envio':'tudo enviado'}${syncFailed.size?` · <span style="color:var(--danger)">${syncFailed.size} página(s) com erro ao enviar</span>`:''}`:(standalone?'O banco online (Supabase) ainda não foi configurado no config.js, ou você não entrou na conta. Os dados ficam só neste aparelho.':'Abra o Foliuma pelo claude.ai com a mesma conta nos dois aparelhos para sincronizar.')}</div></div></div>
+    <p class="mini" style="margin:0 0 10px">Para ver os mesmos dados no celular e no computador, os dois precisam abrir <b>a mesma versão</b> do Foliuma (o link do claude.ai ou o site do GitHub) e estar na <b>mesma conta</b>.</p>
+    <div class="qbtns"><button class="btn sm primary" type="button" data-sy="push" ${online?'':'disabled'}>Enviar tudo deste aparelho agora</button><button class="btn sm" type="button" data-sy="pull" ${online?'':'disabled'}>Buscar da conta agora</button><button class="btn sm" type="button" data-sy="orph">Procurar páginas perdidas</button><button class="btn sm" type="button" data-sy="dates">Ajustar datas do OneNote</button></div>`,
+    actions:[{label:'Fechar',primary:true}],
+    onOpen:()=>{ $('.dialog').addEventListener('click',async e=>{ const b=e.target.closest('[data-sy]'); if(!b||b.disabled)return; const a=b.dataset.sy;
+      if(a==='push'){ pushEverything(); closeOverlay(); } if(a==='pull'){ flushEditor(); await flush(); location.reload(); } if(a==='orph'){ closeOverlay(); recoverOrphans(); } if(a==='dates'){ closeOverlay(); if(!fixOneNoteDates()) toast('Nenhuma página precisava de ajuste.'); } }); }});
+}
+const syncFailed=new Set();
+
+/* ================= Ordenação de páginas, seções e cadernos ================= */
+function sortCfg(k){ const s=tree.settings.sort=tree.settings.sort||{}; if(!s[k]||typeof s[k]!=='object') s[k]={k:'manual',dir:k==='pages'?'desc':'asc'}; return s[k]; }
+const pgCreated=p=>p.created||0, pgUpdated=p=>p.updated||p.created||0;
+function secDates(s){ let c=s.created||Infinity, u=s.updated||0; (s.pages||[]).forEach(p=>{ if(pgCreated(p)) c=Math.min(c,pgCreated(p)); u=Math.max(u,pgUpdated(p)); }); return {c:c===Infinity?0:c,u}; }
+function nbDates(nb){ let c=nb.created||Infinity, u=0; (nb.sections||[]).forEach(s=>{ const d=secDates(s); if(d.c) c=Math.min(c,d.c); u=Math.max(u,d.u); }); return {c:c===Infinity?0:c,u}; }
+function sortBy(list,cfg,getC,getU,getT,getN){ if(!cfg||cfg.k==='manual') return list; const dir=cfg.dir==='asc'?1:-1; const key={created:getC,updated:getU,title:x=>norm(getT(x)),count:getN}[cfg.k]; if(!key) return list;
+  return list.slice().sort((a,b)=>{ const x=key(a),y=key(b); if(cfg.k==='title') return x.localeCompare(y,'pt-BR',{numeric:true})*dir; return (x<y?-1:x>y?1:0)*dir; }); }
+const sortedPages=s=>sortBy(s.pages,sortCfg('pages'),pgCreated,pgUpdated,p=>p.title||'',()=>0);
+const sortedSections=nb=>sortBy(nb.sections,sortCfg('sections'),s=>secDates(s).c,s=>secDates(s).u,s=>s.name,s=>s.pages.length);
+const sortedNotebooks=list=>sortBy(list,sortCfg('notebooks'),n=>nbDates(n).c,n=>nbDates(n).u,n=>n.name,n=>n.sections.reduce((a,s)=>a+s.pages.length,0));
+function sortMenuItems(kind,label,withCount){
+  const c=sortCfg(kind); const set=(k,dir)=>{ c.k=k; if(dir)c.dir=dir; saveTree(); renderAll(); };
+  const items=[{type:'label',label},
+    {label:'Ordem manual',icon:'ul',checked:c.k==='manual',action:()=>set('manual')},
+    {label:'Data de criação',icon:'cal',checked:c.k==='created',action:()=>set('created',c.k==='created'?c.dir:'desc')},
+    {label:'Data de modificação',icon:'clock',checked:c.k==='updated',action:()=>set('updated',c.k==='updated'?c.dir:'desc')},
+    {label:kind==='pages'?'Título':'Nome',icon:'tag',checked:c.k==='title',action:()=>set('title',c.k==='title'?c.dir:'asc')}];
+  if(withCount) items.push({label:'Quantidade de páginas',icon:'pages',checked:c.k==='count',action:()=>set('count',c.k==='count'?c.dir:'desc')});
+  if(c.k!=='manual'){ const [d1,d2]=c.k==='title'?['A → Z','Z → A']:c.k==='count'?['Menos páginas primeiro','Mais páginas primeiro']:['Mais antigas primeiro','Mais recentes primeiro'];
+    items.push({label:d1,icon:'sort',checked:c.dir==='asc',action:()=>set(c.k,'asc')},{label:d2,icon:'sort',checked:c.dir==='desc',action:()=>set(c.k,'desc')}); }
+  return items;
+}
+function pagesSortMenu(anchor){ const d=tree.settings.listShow||'updated'; const show=v=>{ tree.settings.listShow=v; saveTree(); renderPages(); };
+  showMenu(anchor,[...sortMenuItems('pages','Ordenar páginas por'),{sep:true},...sortMenuItems('sections','Ordenar seções (abas) por',true),{sep:true},{type:'label',label:'Data exibida na lista de páginas'},
+    {label:'Modificação (relativa)',checked:d==='updated',action:()=>show('updated')},{label:'Criação',checked:d==='created',action:()=>show('created')},{label:'Criação e modificação completas',checked:d==='full',action:()=>show('full')},{label:'Não mostrar data',checked:d==='none',action:()=>show('none')}]); }
+function pageDateLabel(p){ const d=tree.settings.listShow||'updated'; if(d==='none')return ''; const day=t=>t?new Date(t).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'—';
+  if(d==='created') return 'Criada '+day(p.created); if(d==='full') return `Criada ${day(p.created)} · editada ${day(p.updated||p.created)}`; return fmtRel(p.updated||p.created); }
+function refreshSortBtn(){ const b=$('#pgSort'); if(!b)return; const c=sortCfg('pages'); b.classList.toggle('on',c.k!=='manual'||sortCfg('sections').k!=='manual'); b.title=c.k==='manual'?'Ordenar páginas e seções':`Páginas ordenadas por ${({created:'data de criação',updated:'data de modificação',title:'título'})[c.k]}`; }
 
 /* ================= Login e senha (bloqueio do app) ================= */
 const AUTH_ITER=210000, AUTH_LS=LS+'trust', AUTH_SS='cadernoplus:unlocked', FAIL_SS='cadernoplus:fails';
@@ -3895,7 +4010,7 @@ async function importOneNote(){
   else { if(!files.length){ toast('Escolha ao menos um arquivo exportado do OneNote.'); return } files.forEach(f=>jobs.push({file:f})); }
   let sec, nb;
   if(r.data.dest==='new'){ nb=curNb(); if(!nb||(nb.shared&&!canWriteShared)) nb=tree.notebooks[0]; if(!nb){ nb={id:uid(),name:'Meu caderno',color:NB_COLORS[0],sections:[]}; tree.notebooks.push(nb); tree.openNb[nb.id]=true; }
-    sec={id:uid(),name:r.data.newName,color:SEC_COLORS[nb.sections.length%SEC_COLORS.length],pages:[]}; nb.sections.push(sec); }
+    sec={id:uid(),name:r.data.newName,color:SEC_COLORS[nb.sections.length%SEC_COLORS.length],pages:[],created:Date.now()}; nb.sections.push(sec); }
   else { const f=findSection(r.data.dest); if(!f){ toast('Seção de destino não encontrada.'); return } sec=f.sec; nb=f.nb; }
   const errors=[]; const created=[]; const now=Date.now();
   for(let i=0;i<jobs.length;i++){ const j=jobs[i];
@@ -3906,7 +4021,7 @@ async function importOneNote(){
       chunks.forEach(c=>{ const id=uid(); sec.pages.push({id,title:c.title,level:0,created:now,updated:now}); pageCache[id]={html:c.html||'<p><br></p>',strokes:[],paper:'plain',updatedAt:now}; created.push(id); });
     }catch(e){ errors.push(`${j.file?j.file.name:'Conteúdo colado'}: ${e&&e.message?e.message:'não foi possível ler.'}`); }
   }
-  if(created.length){ commit(nb); created.forEach(id=>savePage(id)); tree.cur={...tree.cur,nb:nb.id,sec:sec.id,page:created[0],view:'page'}; tree.openNb[nb.id]=true; saveTree(); renderAll(); }
+  if(created.length){ commit(nb); created.forEach(id=>savePage(id)); setTimeout(()=>fixOneNoteDates(),300); tree.cur={...tree.cur,nb:nb.id,sec:sec.id,page:created[0],view:'page'}; tree.openNb[nb.id]=true; saveTree(); renderAll(); }
   else if(r.data.dest==='new'){ nb.sections.splice(nb.sections.indexOf(sec),1); saveTree(); }
   if(errors.length) modal({title:created.length?'Importação concluída com avisos':'Não foi possível importar',body:`${created.length?`<p>${created.length} página(s) importada(s) para “${esc(sec.name)}”.</p>`:''}<p>Estes itens não foram importados:</p><ul class="steps">${errors.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`,actions:[{label:'Entendi',primary:true}]});
   else toast(`${created.length} página(s) importada(s) para “${sec.name}”.`);
@@ -3996,6 +4111,7 @@ $('#appMenuBtn').addEventListener('click',e=>showMenu(e.currentTarget,[
   {label:'Conta e sincronização…',icon:'users',action:()=>window.cadernoAccount&&window.cadernoAccount.open()},
   {label:'Instalar no celular…',icon:'down',action:()=>window.cadernoAccount&&window.cadernoAccount.install()},
   {sep:true},
+  {label:'Sincronização…',icon:'down',action:()=>syncDialog()},
   {label:authCfg()?'Login e senha…':'Criar login e senha…',icon:'users',action:()=>authCfg()?manageAuth():setupAuth()},
   ...(authCfg()?[{label:'Bloquear agora',icon:'eyeoff',k:'Ctrl⇧L',action:()=>lockNow(false)}]:[]),
   {sep:true},
@@ -4123,7 +4239,7 @@ window.addEventListener('beforeunload',()=>{ if(editor&&curPage()&&canEditPage(c
 
 /* ================= Boot ================= */
 function renderAll(){ fixCur(); renderRail(); renderTabs(); renderPages(); renderEditor(); syncBottomNav(); }
-applyTheme(); fixCur(); renderAll(); setSync(); timerRefresh(); checkAuthGate();
+applyTheme(); fixCur(); renderAll(); setSync(); timerRefresh(); checkAuthGate(); setTimeout(()=>fixOneNoteDates(),1200);
 if(!authCfg()&&!tree.settings.authAsked){ setTimeout(()=>{ if(authCfg()||document.body.classList.contains('locked'))return; tree.settings.authAsked=true; saveTree(); toast('Proteja o Foliuma com login e senha.',{label:'Criar login',fn:()=>setupAuth()}); },2500); }
 initRemote();
 setTimeout(checkDue,2500); setInterval(checkDue,30000);
