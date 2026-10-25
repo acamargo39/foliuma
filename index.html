@@ -474,6 +474,13 @@ mark{background:var(--mark);color:inherit;border-radius:3px}
 
 
 
+/* ---------- Configurações ---------- */
+.setsec{border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:12px}
+.setsec h3{margin:0 0 4px;font-size:14.5px;font-weight:700;display:flex;align-items:center;gap:8px}
+.setsec p{margin:0 0 10px;font-size:13px;color:var(--muted);line-height:1.5}
+.setsec .qbtns{margin:0}
+.setmeter{height:6px;border-radius:3px;background:var(--hover);overflow:hidden;margin:6px 0 4px}
+.setmeter i{display:block;height:100%;background:var(--accent)}
 /* ---------- Login e senha ---------- */
 .authgate{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:20px;overflow:auto;background:radial-gradient(900px 520px at 15% -10%,color-mix(in srgb,var(--accent) 20%,transparent),transparent 65%),radial-gradient(700px 480px at 110% 110%,color-mix(in srgb,#2F9E44 10%,transparent),transparent 60%),var(--bg)}
 .authgate[hidden]{display:none}
@@ -3021,6 +3028,55 @@ function fixImportedSections(silent){
 const purgeLater=[];
 function offerFixSections(){ if(tree.settings.secFixAsked===2)return; const n=sectionsWithMarkers().length; if(!n)return; toast(`Encontrei ${n} importação(ões) do OneNote com páginas fora das seções certas.`,{label:'Organizar agora',fn:()=>fixImportedSections()}); }
 
+/* ================= Configurações ================= */
+async function storageInfo(){ try{ const e=await navigator.storage.estimate(); return e; }catch(_){ return null; } }
+async function clearAppCache(){
+  const steps=[]; flushEditor(); try{ await flush(); }catch(_){}
+  try{ if('caches' in window){ const ks=await caches.keys(); for(const k of ks) await caches.delete(k); steps.push(ks.length+' cache(s) de arquivos'); } }catch(_){}
+  try{ if(navigator.serviceWorker){ const regs=await navigator.serviceWorker.getRegistrations(); for(const r of regs) await r.unregister(); if(regs.length) steps.push('modo offline reiniciado'); } }catch(_){}
+  try{ sessionStorage.clear(); localStorage.removeItem(AUTH_LS); }catch(_){}
+  try{ await Promise.all(['./','index.html','config.js','supabase-shim.js','manifest.webmanifest'].map(u=>fetch(u+(u.includes('?')?'&':'?')+'nocache='+Date.now(),{cache:'reload'}).catch(()=>{}))); }catch(_){}
+  try{ localStorage.setItem(LS+'cachecleared',String(Date.now())); }catch(_){}
+  location.reload();
+}
+async function wipeDevice(){
+  const online=remoteOk&&viewerId; const pend=pending.size+inflight.size;
+  const r=await modal({title:'Apagar dados deste aparelho',body:`<p>${online?(pend?`<b style="color:var(--danger)">Ainda há ${pend} alteração(ões) aguardando envio.</b> Espere sincronizar antes de apagar.`:'Seus dados estão salvos na sua conta e voltam ao abrir o Foliuma de novo.'):'<b style="color:var(--danger)">Este aparelho não está sincronizando.</b> Tudo o que estiver só aqui será perdido. Faça um backup antes (menu ⋯ → Fazer backup).'}</p><input class="field" id="wpC" placeholder="Digite APAGAR para confirmar" autocomplete="off">`,
+    actions:[{label:'Cancelar'},{label:'Apagar e recarregar',primary:true,danger:true,value:'ok'}],focus:'#wpC',collect:()=>$('#wpC').value.trim().toUpperCase()});
+  if(!r||r.value!=='ok')return; if(r.data!=='APAGAR'){ toast('Digite APAGAR para confirmar.'); return }
+  try{ await flush(); }catch(_){}
+  try{ Object.keys(localStorage).filter(k=>k.indexOf(LS)===0).forEach(k=>localStorage.removeItem(k)); sessionStorage.clear(); indexedDB.deleteDatabase('cadernoplus'); if('caches' in window){ for(const k of await caches.keys()) await caches.delete(k); } if(navigator.serviceWorker){ for(const reg of await navigator.serviceWorker.getRegistrations()) await reg.unregister(); } }catch(_){}
+  location.reload();
+}
+async function settingsDialog(){
+  const L=layoutCfg(), th=tree.settings.theme||'auto', a=authCfg(); const est=await storageInfo();
+  const mb=b=>b<1048576?Math.max(1,Math.round(b/1024))+' KB':(b/1048576).toFixed(b>10485760?0:1).replace('.',',')+' MB'; const used=est&&est.usage?est.usage:0, quota=est&&est.quota?est.quota:0;
+  const lsBytes=(()=>{ let n=0; try{ Object.keys(localStorage).forEach(k=>{ if(k.indexOf(LS)===0) n+=(localStorage.getItem(k)||'').length*2; }); }catch(_){} return n; })();
+  const online=remoteOk&&viewerId;
+  await modal({title:'Configurações',body:`
+    <div class="setsec"><h3>🎨 Aparência</h3><p>Tema e painéis da tela.</p><div class="qbtns">
+      <div class="seg" id="stTheme" style="margin:0">${[['auto','Automático'],['light','Claro'],['dark','Escuro']].map(([v,l])=>`<button type="button" data-th="${v}" class="${th===v?'on':''}">${l}</button>`).join('')}</div>
+      <button class="btn sm" type="button" data-st="rail">${L.norail?'Mostrar':'Ocultar'} menu lateral</button><button class="btn sm" type="button" data-st="pages">${L.nopages?'Mostrar':'Ocultar'} lista de páginas</button></div></div>
+    <div class="setsec"><h3>🔐 Conta e segurança</h3><p>${a?`Login ativado para <b>${esc(a.user)}</b>.`:'Nenhum login configurado.'} ${online?'Sincronizando com a sua conta.':'Este aparelho não está sincronizando.'}</p><div class="qbtns">
+      <button class="btn sm" type="button" data-st="auth">${a?'Login e senha…':'Criar login e senha…'}</button><button class="btn sm" type="button" data-st="sync">Sincronização…</button>${window.cadernoAccount?'<button class="btn sm" type="button" data-st="account">Conta online…</button>':''}</div></div>
+    <div class="setsec"><h3>🧹 Cache e armazenamento</h3>
+      <p>Use <b>Limpar cache</b> se o Foliuma parecer desatualizado ou travar em alguma tela, como o login. Ele apaga os arquivos guardados do app, reinicia o modo offline e recarrega a versão mais nova. <b>Suas anotações não são apagadas.</b></p>
+      ${quota?`<div class="setmeter"><i style="width:${Math.min(100,used/quota*100).toFixed(1)}%"></i></div><p class="mini" style="margin:0 0 10px">Usando ${mb(used)} de ${mb(quota)} disponíveis neste navegador · anotações: ${mb(lsBytes)}</p>`:''}
+      <div class="qbtns"><button class="btn sm primary" type="button" data-st="cache">Limpar cache e recarregar</button><button class="btn sm danger" type="button" data-st="wipe">Apagar dados deste aparelho…</button></div>
+      <p class="mini" style="margin:10px 0 0">O navegador não deixa um site apagar o cache de outros sites. Para limpar tudo no Chrome: menu ⋮ → Excluir dados de navegação.</p></div>`,
+    actions:[{label:'Fechar',primary:true}],
+    onOpen:()=>{ $('.dialog').classList.add('wide');
+      $('#stTheme').addEventListener('click',e=>{ const b=e.target.closest('[data-th]'); if(!b)return; tree.settings.theme=b.dataset.th; applyTheme(); saveTree(); $$('#stTheme button').forEach(x=>x.classList.toggle('on',x===b)); });
+      $('.dialog').addEventListener('click',async e=>{ const b=e.target.closest('[data-st]'); if(!b)return; const act=b.dataset.st;
+        if(act==='rail'||act==='pages'){ toggleLayout(act==='rail'?'norail':'nopages'); b.textContent=(layoutCfg()[act==='rail'?'norail':'nopages']?'Mostrar ':'Ocultar ')+(act==='rail'?'menu lateral':'lista de páginas'); return }
+        if(act==='cache'){ b.disabled=true; b.textContent='Limpando…'; await clearAppCache(); return }
+        closeOverlay();
+        if(act==='auth') setTimeout(()=>authCfg()?manageAuth():setupAuth(),30);
+        if(act==='sync') setTimeout(syncDialog,30);
+        if(act==='account') setTimeout(()=>window.cadernoAccount.open(),30);
+        if(act==='wipe') setTimeout(wipeDevice,30); }); }});
+}
+
 /* ================= Login e senha (bloqueio do app) ================= */
 const AUTH_ITER=210000, AUTH_LS=LS+'trust', AUTH_SS='cadernoplus:unlocked', FAIL_SS='cadernoplus:fails';
 const authEnc=new TextEncoder();
@@ -3034,12 +3090,13 @@ const authCfg=()=>tree.settings.auth||null;
 function pwScore(p){ let s=0; if(p.length>=8)s++; if(p.length>=12)s++; if(/[a-z]/.test(p)&&/[A-Z]/.test(p))s++; if(/\d/.test(p))s++; if(/[^A-Za-z0-9]/.test(p))s++; return Math.min(4,s); }
 function pwMeter(inp,meter,hint){ const s=inp.value?pwScore(inp.value):-1; const c=['#E03131','#F76707','#F59F00','#2F9E44','#2F9E44'][Math.max(0,s)]; meter.style.width=s<0?'0':((s+1)*20)+'%'; meter.style.background=c; hint.textContent=s<0?'Use pelo menos 6 caracteres. Misture letras, números e símbolos.':['Muito fraca','Fraca','Razoável','Boa','Forte'][s]; }
 function trustValid(){ const a=authCfg(); if(!a)return false; try{ const t=JSON.parse(localStorage.getItem(AUTH_LS)||'null'); return !!(t&&t.until>Date.now()&&t.h===a.hash.slice(0,16)); }catch(_){ return false; } }
-function isUnlocked(){ const a=authCfg(); if(!a)return true; try{ if(sessionStorage.getItem(AUTH_SS)===a.hash.slice(0,16)) return true; }catch(_){} return trustValid(); }
-function markUnlocked(remember){ const a=authCfg(); if(!a)return; try{ sessionStorage.setItem(AUTH_SS,a.hash.slice(0,16)); sessionStorage.removeItem(FAIL_SS); }catch(_){} if(remember){ try{ localStorage.setItem(AUTH_LS,JSON.stringify({until:Date.now()+7*86400000,h:a.hash.slice(0,16)})); }catch(_){} } lastActivity=Date.now(); }
+let authSession=false;
+function isUnlocked(){ const a=authCfg(); if(!a)return true; if(authSession)return true; try{ if(sessionStorage.getItem(AUTH_SS)===a.hash.slice(0,16)) return true; }catch(_){} return trustValid(); }
+function markUnlocked(remember){ authSession=true; const a=authCfg(); if(!a)return; try{ sessionStorage.setItem(AUTH_SS,a.hash.slice(0,16)); sessionStorage.removeItem(FAIL_SS); }catch(_){} if(remember){ try{ localStorage.setItem(AUTH_LS,JSON.stringify({until:Date.now()+7*86400000,h:a.hash.slice(0,16)})); }catch(_){} } lastActivity=Date.now(); }
 let lastActivity=Date.now(), gateView='login';
 ['mousemove','keydown','pointerdown','touchstart','wheel'].forEach(ev=>document.addEventListener(ev,()=>{ if(!document.body.classList.contains('locked')) lastActivity=Date.now(); },{passive:true}));
 setInterval(()=>{ const a=authCfg(); if(!a||!a.lock||document.body.classList.contains('locked'))return; if(Date.now()-lastActivity>a.lock*60000) lockNow(true); },15000);
-function lockNow(auto){ if(!authCfg())return; flushEditor(); try{ sessionStorage.removeItem(AUTH_SS); localStorage.removeItem(AUTH_LS); }catch(_){} closeOverlay(); hideMenu(); showGate(auto?'Bloqueado por inatividade. Entre de novo para continuar.':''); }
+function lockNow(auto){ if(!authCfg())return; authSession=false; flushEditor(); try{ sessionStorage.removeItem(AUTH_SS); localStorage.removeItem(AUTH_LS); }catch(_){} closeOverlay(); hideMenu(); showGate(auto?'Bloqueado por inatividade. Entre de novo para continuar.':''); }
 function checkAuthGate(){ if(authCfg()&&!isUnlocked()) showGate(); else if(!authCfg()) hideGate(); refreshLockBtn(); }
 function hideGate(){ document.body.classList.remove('locked'); const g=$('#authGate'); if(g)g.hidden=true; }
 function gateEl(){ let g=$('#authGate'); if(!g){ g=document.createElement('div'); g.id='authGate'; g.className='authgate'; g.setAttribute('role','dialog'); g.setAttribute('aria-modal','true'); document.body.appendChild(g); } return g; }
@@ -4088,7 +4145,7 @@ async function importOneNote(){
 /* ================= Search palette ================= */
 const COMMANDS=[
   {label:'Nova página',run:()=>{tree.cur.view='page';newPage()}},{label:'Nova seção',run:newSection},{label:'Novo caderno',run:newNotebook},
-  {label:'Ir para Início',run:()=>setView('home')},{label:'Abrir Hoje',run:()=>setView('today')},{label:'Mostrar/ocultar menu lateral',run:()=>toggleLayout('norail')},{label:'Mostrar/ocultar lista de páginas',run:()=>toggleLayout('nopages')},{label:'Login e senha',run:()=>setTimeout(()=>authCfg()?manageAuth():setupAuth(),60)},{label:'Bloquear agora',run:()=>{ if(authCfg()) setTimeout(()=>lockNow(false),60); else toast('Crie um login primeiro (menu ⋯ → Criar login e senha).'); }},{label:'Abrir Links',run:()=>setView('links')},{label:'Histórico de versões desta página',run:()=>{ const p=tree.cur.view==='page'&&curPage(); if(p) setTimeout(()=>versionsDialog(p.id),60); else toast('Abra uma página primeiro.'); }},{label:'Salvar versão com nome',run:()=>{ const p=tree.cur.view==='page'&&curPage(); if(!p){ toast('Abra uma página primeiro.'); return } setTimeout(async()=>{ const n=await askText('Salvar versão com nome','','Ex.: Enviado ao cliente'); if(n) saveNamedVersion(p.id,n); },60); }},{label:'Captura rápida',run:()=>setTimeout(()=>openCapture(),60)},{label:'Abrir Caixa de entrada',run:()=>{ const f=inboxPage(true); openPage(f.page.id); }},{label:'Abrir Tarefas',run:()=>setView('tasks')},{label:'Abrir Lembretes',run:()=>setView('reminders')},{label:'Abrir Tags',run:()=>setView('tags')},{label:'Abrir Calendário',run:()=>setView('calendar')},{label:'Abrir Atividades',run:()=>setView('activities')},{label:'Abrir Relatórios',run:()=>setView('reports')},{label:'Pausar cronômetro',run:()=>{ if(timerNow())stopTimer({}); else toast('Nenhum cronômetro rodando.'); }},{label:'Novo quadro Kanban',run:()=>{tree.cur.view='page';newPage({kind:'board',title:'Novo quadro',icon:'📋'})}},{label:'Abrir Lixeira',run:()=>setView('trash')},
+  {label:'Ir para Início',run:()=>setView('home')},{label:'Abrir Hoje',run:()=>setView('today')},{label:'Configurações',run:()=>setTimeout(settingsDialog,60)},{label:'Limpar cache do navegador',run:()=>setTimeout(settingsDialog,60)},{label:'Mostrar/ocultar menu lateral',run:()=>toggleLayout('norail')},{label:'Mostrar/ocultar lista de páginas',run:()=>toggleLayout('nopages')},{label:'Login e senha',run:()=>setTimeout(()=>authCfg()?manageAuth():setupAuth(),60)},{label:'Bloquear agora',run:()=>{ if(authCfg()) setTimeout(()=>lockNow(false),60); else toast('Crie um login primeiro (menu ⋯ → Criar login e senha).'); }},{label:'Abrir Links',run:()=>setView('links')},{label:'Histórico de versões desta página',run:()=>{ const p=tree.cur.view==='page'&&curPage(); if(p) setTimeout(()=>versionsDialog(p.id),60); else toast('Abra uma página primeiro.'); }},{label:'Salvar versão com nome',run:()=>{ const p=tree.cur.view==='page'&&curPage(); if(!p){ toast('Abra uma página primeiro.'); return } setTimeout(async()=>{ const n=await askText('Salvar versão com nome','','Ex.: Enviado ao cliente'); if(n) saveNamedVersion(p.id,n); },60); }},{label:'Captura rápida',run:()=>setTimeout(()=>openCapture(),60)},{label:'Abrir Caixa de entrada',run:()=>{ const f=inboxPage(true); openPage(f.page.id); }},{label:'Abrir Tarefas',run:()=>setView('tasks')},{label:'Abrir Lembretes',run:()=>setView('reminders')},{label:'Abrir Tags',run:()=>setView('tags')},{label:'Abrir Calendário',run:()=>setView('calendar')},{label:'Abrir Atividades',run:()=>setView('activities')},{label:'Abrir Relatórios',run:()=>setView('reports')},{label:'Pausar cronômetro',run:()=>{ if(timerNow())stopTimer({}); else toast('Nenhum cronômetro rodando.'); }},{label:'Novo quadro Kanban',run:()=>{tree.cur.view='page';newPage({kind:'board',title:'Novo quadro',icon:'📋'})}},{label:'Abrir Lixeira',run:()=>setView('trash')},
   {label:'Importar do OneNote',run:()=>importOneNote()},{label:'Gravar áudio na página',run:()=>startRecording()},{label:'Alternar tema claro/escuro',run:()=>toggleTheme()},{label:'Modo foco',run:()=>toggleFocus()},{label:'Fazer backup de tudo',run:()=>backup()}];
 function openPalette(){
   const ov=$('#overlay'); ov.innerHTML=`<div class="dialog palette" role="dialog" aria-label="Buscar"><input id="pq" placeholder="Buscar páginas, textos, #tags ou comandos…" autocomplete="off"><div class="presults" id="pr"></div></div>`;
@@ -4169,6 +4226,7 @@ $('#appMenuBtn').addEventListener('click',e=>showMenu(e.currentTarget,[
   {label:'Conta e sincronização…',icon:'users',action:()=>window.cadernoAccount&&window.cadernoAccount.open()},
   {label:'Instalar no celular…',icon:'down',action:()=>window.cadernoAccount&&window.cadernoAccount.install()},
   {sep:true},
+  {label:'Configurações…',icon:'sliders',action:()=>settingsDialog()},
   {label:'Sincronização…',icon:'down',action:()=>syncDialog()},
   {label:authCfg()?'Login e senha…':'Criar login e senha…',icon:'users',action:()=>authCfg()?manageAuth():setupAuth()},
   ...(authCfg()?[{label:'Bloquear agora',icon:'eyeoff',k:'Ctrl⇧L',action:()=>lockNow(false)}]:[]),
@@ -4306,7 +4364,8 @@ function applyLayout(){ const L=layoutCfg(); app.classList.toggle('norail',!!L.n
 function toggleLayout(k){ const L=layoutCfg(); L[k]=!L[k]; if(!L[k]) delete L[k]; saveTree(); applyLayout(); toast(k==='norail'?(L.norail?'Menu lateral oculto. Use o botão no topo ou Ctrl Alt M para mostrar.':'Menu lateral visível.'):(L.nopages?'Lista de páginas oculta. Use o botão no topo ou Ctrl Alt P para mostrar.':'Lista de páginas visível.')); }
 document.addEventListener('click',e=>{ if(e.target.closest('#toggleRailBtn')) toggleLayout('norail'); else if(e.target.closest('#togglePagesBtn')) toggleLayout('nopages'); });
 function renderAll(){ applyLayout(); fixCur(); renderRail(); renderTabs(); renderPages(); renderEditor(); syncBottomNav(); }
-applyTheme(); fixCur(); renderAll(); setSync(); timerRefresh(); checkAuthGate(); setTimeout(()=>fixOneNoteDates(),1200); setTimeout(()=>{ if(!remoteOk) offerFixSections(); },4000);
+applyTheme(); fixCur(); renderAll(); setSync(); timerRefresh(); checkAuthGate();
+try{ const cc=+localStorage.getItem(LS+'cachecleared'); if(cc&&Date.now()-cc<60000){ localStorage.removeItem(LS+'cachecleared'); if(document.body.classList.contains('locked')) showGate('Cache limpo. Entre de novo para continuar.'); else setTimeout(()=>toast('Cache limpo. Você está usando a versão mais nova do Foliuma.'),900); } }catch(_){} setTimeout(()=>fixOneNoteDates(),1200); setTimeout(()=>{ if(!remoteOk) offerFixSections(); },4000);
 if(!authCfg()&&!tree.settings.authAsked){ setTimeout(()=>{ if(authCfg()||document.body.classList.contains('locked'))return; tree.settings.authAsked=true; saveTree(); toast('Proteja o Foliuma com login e senha.',{label:'Criar login',fn:()=>setupAuth()}); },2500); }
 initRemote();
 setTimeout(checkDue,2500); setInterval(checkDue,30000);
