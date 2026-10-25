@@ -1,6 +1,6 @@
 // Foliuma — service worker: funciona offline e carrega rápido.
 // Ao publicar uma nova versão, aumente o número abaixo.
-const VERSION = 'foliuma-v7';
+const VERSION = 'foliuma-v8';
 const SHELL = ['./', './index.html', './config.js', './supabase-shim.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/favicon.png', './icons/favicon.svg', './icons/favicon.ico'];
 
