@@ -1128,9 +1128,31 @@ const ACCENTS=[['#5B5BD6','#8B8BFF','Índigo'],['#1C7ED6','#74C0FC','Azul'],['#0
 const COVERS=['linear-gradient(135deg,#667EEA 0%,#764BA2 100%)','linear-gradient(135deg,#F093FB 0%,#F5576C 100%)','linear-gradient(135deg,#4FACFE 0%,#00F2FE 100%)','linear-gradient(135deg,#43E97B 0%,#38F9D7 100%)','linear-gradient(135deg,#FA709A 0%,#FEE140 100%)','linear-gradient(135deg,#30CFD0 0%,#330867 100%)','linear-gradient(120deg,#E0C3FC 0%,#8EC5FC 100%)','linear-gradient(135deg,#FFECD2 0%,#FCB69F 100%)','radial-gradient(at 20% 30%,#FF9A8B 0,transparent 55%),radial-gradient(at 80% 20%,#7F7FD5 0,transparent 55%),radial-gradient(at 60% 90%,#86A8E7 0,transparent 55%),#1B1B3A','radial-gradient(at 10% 90%,#0BA360 0,transparent 55%),radial-gradient(at 90% 10%,#3CBA92 0,transparent 50%),#0F2027','linear-gradient(160deg,#0F2027,#203A43,#2C5364)','repeating-linear-gradient(45deg,#F8F9FA 0 14px,#EEF0F4 14px 28px)'];
 const EMOJIS='📓📘📗📕📙📝✏️📌📎📅✅💡⭐🔥🎯🚀💼🏠🎓🧪🎨🎵🍳✈️💰📊🧠❤️🌱⚙️🔒📷🎬🧾📚🗂️🏃🎉🐾☕🛒💬🧩🌍🔔🎙️'.match(/\p{Extended_Pictographic}\uFE0F?/gu)||[];
 const LS='cadernoplus:';
-const lsGet=k=>{try{const v=localStorage.getItem(LS+k);return v?JSON.parse(v):null}catch(e){return null}};
-const lsSet=(k,v)=>{try{localStorage.setItem(LS+k,JSON.stringify(v));return true}catch(e){return false}};
-const lsDel=k=>{try{localStorage.removeItem(LS+k)}catch(e){}};
+/* ---- conteúdo das páginas no IndexedDB (muito mais espaço que o localStorage) ---- */
+const pageMem={}; let pagesLoaded=false, pdbOk=true, unloading=false;
+window.addEventListener('beforeunload',()=>{ unloading=true; });
+const pdb={p:null,
+  open(){ if(this.p)return this.p; this.p=new Promise((res,rej)=>{ try{ const r=indexedDB.open('foliuma-pages',1); r.onupgradeneeded=()=>r.result.createObjectStore('p'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); r.onblocked=()=>rej(new Error('blocked')); }catch(e){ rej(e); } }); return this.p; },
+  async all(){ const d=await this.open(); return await new Promise((res,rej)=>{ const out={}; const rq=d.transaction('p').objectStore('p').openCursor(); rq.onsuccess=()=>{ const c=rq.result; if(c){ out[c.key]=c.value; c.continue(); } else res(out); }; rq.onerror=()=>rej(rq.error); }); },
+  put(id,v){ return this.open().then(d=>new Promise(res=>{ try{ const t=d.transaction('p','readwrite'); t.objectStore('p').put(v,id); t.oncomplete=()=>res(true); t.onerror=()=>res(false); t.onabort=()=>res(false); }catch(e){ res(false); } })).catch(()=>false); },
+  del(id){ return this.open().then(d=>new Promise(res=>{ try{ const t=d.transaction('p','readwrite'); t.objectStore('p').delete(id); t.oncomplete=()=>res(true); t.onerror=()=>res(false); }catch(e){ res(false); } })).catch(()=>false); }
+};
+const lsRaw={ get:k=>{try{const v=localStorage.getItem(LS+k);return v?JSON.parse(v):null}catch(e){return null}}, set:(k,v)=>{try{localStorage.setItem(LS+k,JSON.stringify(v));return true}catch(e){return false}}, del:k=>{try{localStorage.removeItem(LS+k)}catch(e){}} };
+const isPg=k=>typeof k==='string'&&k.indexOf('p:')===0;
+const lsGet=k=>{ if(isPg(k)&&pdbOk){ const id=k.slice(2); if(pagesLoaded) return pageMem[id]||null; return pageMem[id]||lsRaw.get(k); } return lsRaw.get(k); };
+const lsSet=(k,v)=>{ if(isPg(k)&&pdbOk){ const id=k.slice(2); pageMem[id]=v; pdb.put(id,v).then(ok=>{ if(!ok){ pdbOk=false; lsRaw.set(k,v); } }); if(unloading) lsRaw.set(k,v); return true; } return lsRaw.set(k,v); };
+const lsDel=k=>{ if(isPg(k)){ const id=k.slice(2); delete pageMem[id]; pdb.del(id); } lsRaw.del(k); };
+const pagesReady=(async()=>{
+  try{ const all=await pdb.all(); Object.keys(all).forEach(id=>{ if(!pageMem[id]||(all[id].updatedAt||0)>(pageMem[id].updatedAt||0)) pageMem[id]=all[id]; });
+    const keys=Object.keys(localStorage).filter(k=>k.indexOf(LS+'p:')===0); let moved=0;
+    for(const k of keys){ const id=k.slice((LS+'p:').length); let v=null; try{ v=JSON.parse(localStorage.getItem(k)); }catch(_){}
+      if(!v){ continue; }
+      if(!pageMem[id]||(v.updatedAt||0)>=(pageMem[id].updatedAt||0)){ if(!(await pdb.put(id,v))) throw new Error('falha ao gravar'); pageMem[id]=v; }
+      localStorage.removeItem(k); moved++; }
+    if(moved) console.info('Foliuma: '+moved+' página(s) movida(s) para o IndexedDB.');
+  }catch(e){ console.warn('Foliuma: IndexedDB indisponível, usando localStorage.',e); pdbOk=false; }
+  pagesLoaded=true;
+})();
 const fmtDate=t=>t?new Date(t).toLocaleString('pt-BR',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
 const fmtRel=t=>{if(!t)return'';const d=(Date.now()-t)/1000;if(d<60)return'agora';if(d<3600)return Math.floor(d/60)+' min';if(d<86400)return Math.floor(d/3600)+' h';if(d<86400*6)return Math.floor(d/86400)+' d';return new Date(t).toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})};
 const dueLabel=ms=>{const d=new Date(ms);return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'}).replace('.','').replace(' de ',' ')+', '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})};
@@ -2935,7 +2957,7 @@ function fixOneNoteDates(silent){
 async function recoverOrphans(){
   const known=new Set([...treePageIds(tree),...(tree.trash||[]).map(t=>t.page.id)]); Object.values(sharedNbs).forEach(nb=>nb.sections.forEach(s=>s.pages.forEach(p=>known.add(p.id))));
   const found={};
-  Object.keys(localStorage).forEach(k=>{ if(k.indexOf(LS+'p:')!==0)return; const id=k.slice((LS+'p:').length); if(known.has(id))return; const d=lsGet('p:'+id); if(d&&(d.html||d.board)) found[id]=d; });
+  [...Object.keys(pageMem),...Object.keys(localStorage).filter(k=>k.indexOf(LS+'p:')===0).map(k=>k.slice((LS+'p:').length))].forEach(id=>{ if(known.has(id)||found[id])return; const d=lsGet('p:'+id); if(d&&(d.html||d.board)) found[id]=d; });
   if(remoteOk&&viewerId){ try{ const snap=await db.collection('data/users/'+viewerId).limit(1000).get(); const map={}; snap.docs.forEach(d=>map[d.id]=d.data());
       Object.keys(map).forEach(k=>{ if(!k.startsWith('p_')||/__c\d+$/.test(k))return; const id=k.slice(2); if(known.has(id)||found[id])return; const d=assembleFromMap(map,k); if(d&&(d.html||d.board)) found[id]=d; }); }catch(_){} }
   const SEEDRE=/(O (Caderno\+|Foliuma) funciona como o OneNote|Escreva livremente aqui\. Experimente o modo de desenho|Revisar anotações da reunião[\s\S]{0,120}Enviar orçamento)/; const seenTxt=new Set();
@@ -3045,13 +3067,13 @@ async function wipeDevice(){
     actions:[{label:'Cancelar'},{label:'Apagar e recarregar',primary:true,danger:true,value:'ok'}],focus:'#wpC',collect:()=>$('#wpC').value.trim().toUpperCase()});
   if(!r||r.value!=='ok')return; if(r.data!=='APAGAR'){ toast('Digite APAGAR para confirmar.'); return }
   try{ await flush(); }catch(_){}
-  try{ Object.keys(localStorage).filter(k=>k.indexOf(LS)===0).forEach(k=>localStorage.removeItem(k)); sessionStorage.clear(); indexedDB.deleteDatabase('cadernoplus'); if('caches' in window){ for(const k of await caches.keys()) await caches.delete(k); } if(navigator.serviceWorker){ for(const reg of await navigator.serviceWorker.getRegistrations()) await reg.unregister(); } }catch(_){}
+  try{ Object.keys(localStorage).filter(k=>k.indexOf(LS)===0).forEach(k=>localStorage.removeItem(k)); sessionStorage.clear(); indexedDB.deleteDatabase('cadernoplus'); indexedDB.deleteDatabase('foliuma-pages'); if('caches' in window){ for(const k of await caches.keys()) await caches.delete(k); } if(navigator.serviceWorker){ for(const reg of await navigator.serviceWorker.getRegistrations()) await reg.unregister(); } }catch(_){}
   location.reload();
 }
 async function settingsDialog(){
   const L=layoutCfg(), th=tree.settings.theme||'auto', a=authCfg(); const est=await storageInfo();
   const mb=b=>b<1048576?Math.max(1,Math.round(b/1024))+' KB':(b/1048576).toFixed(b>10485760?0:1).replace('.',',')+' MB'; const used=est&&est.usage?est.usage:0, quota=est&&est.quota?est.quota:0;
-  const lsBytes=(()=>{ let n=0; try{ Object.keys(localStorage).forEach(k=>{ if(k.indexOf(LS)===0) n+=(localStorage.getItem(k)||'').length*2; }); }catch(_){} return n; })();
+  const lsBytes=(()=>{ let n=0; try{ Object.keys(localStorage).forEach(k=>{ if(k.indexOf(LS)===0) n+=(localStorage.getItem(k)||'').length*2; }); Object.values(pageMem).forEach(v=>{ n+=JSON.stringify(v).length; }); }catch(_){} return n; })();
   const online=remoteOk&&viewerId;
   await modal({title:'Configurações',body:`
     <div class="setsec"><h3>🎨 Aparência</h3><p>Tema e painéis da tela.</p><div class="qbtns">
@@ -3131,7 +3153,7 @@ function showGate(note){
     if(gateView==='newpass'&&recoveredOk){ const p1=g.querySelector('#agN1').value, p2=g.querySelector('#agN2').value; if(p1.length<6){ msg('A senha precisa ter pelo menos 6 caracteres.'); return } if(p1!==p2){ msg('As senhas não conferem.'); return }
       btn.disabled=true; const salt=randB64(16); a.salt=salt; a.hash=await pbkdf2(p1,salt,AUTH_ITER); a.iter=AUTH_ITER; a.updated=Date.now(); saveTree(); markUnlocked(false); hideGate(); toast('Senha redefinida. Seu código de recuperação continua o mesmo.'); refreshLockBtn(); return }
     if(gateView==='lost'){ if(g.querySelector('#agConfirm').value.trim().toUpperCase()!=='APAGAR'){ msg('Digite APAGAR para confirmar.'); return }
-      try{ Object.keys(localStorage).filter(k=>k.indexOf(LS)===0).forEach(k=>localStorage.removeItem(k)); sessionStorage.clear(); indexedDB.deleteDatabase('cadernoplus'); }catch(_){} location.reload(); }
+      try{ Object.keys(localStorage).filter(k=>k.indexOf(LS)===0).forEach(k=>localStorage.removeItem(k)); sessionStorage.clear(); indexedDB.deleteDatabase('cadernoplus'); indexedDB.deleteDatabase('foliuma-pages'); }catch(_){} location.reload(); }
   };
   g.onclick=e=>{ const v=e.target.closest('[data-gv]'); if(v){ gateView=v.dataset.gv; draw(); return } const s=e.target.closest('[data-show]'); if(s){ const i=g.querySelector('#'+s.dataset.show); i.type=i.type==='password'?'text':'password'; s.textContent=i.type==='password'?'Mostrar':'Ocultar'; i.focus(); return } if(e.target.closest('#agGo')) go(); };
   g.onkeydown=e=>{ if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type!=='checkbox'){ e.preventDefault(); if(e.target.id==='agUser'){ g.querySelector('#agPass').focus(); return } if(e.target.id==='agN1'){ g.querySelector('#agN2').focus(); return } go(); } };
@@ -4364,11 +4386,13 @@ function applyLayout(){ const L=layoutCfg(); app.classList.toggle('norail',!!L.n
 function toggleLayout(k){ const L=layoutCfg(); L[k]=!L[k]; if(!L[k]) delete L[k]; saveTree(); applyLayout(); toast(k==='norail'?(L.norail?'Menu lateral oculto. Use o botão no topo ou Ctrl Alt M para mostrar.':'Menu lateral visível.'):(L.nopages?'Lista de páginas oculta. Use o botão no topo ou Ctrl Alt P para mostrar.':'Lista de páginas visível.')); }
 document.addEventListener('click',e=>{ if(e.target.closest('#toggleRailBtn')) toggleLayout('norail'); else if(e.target.closest('#togglePagesBtn')) toggleLayout('nopages'); });
 function renderAll(){ applyLayout(); fixCur(); renderRail(); renderTabs(); renderPages(); renderEditor(); syncBottomNav(); }
+pagesReady.then(()=>{
 applyTheme(); fixCur(); renderAll(); setSync(); timerRefresh(); checkAuthGate();
 try{ const cc=+localStorage.getItem(LS+'cachecleared'); if(cc&&Date.now()-cc<60000){ localStorage.removeItem(LS+'cachecleared'); if(document.body.classList.contains('locked')) showGate('Cache limpo. Entre de novo para continuar.'); else setTimeout(()=>toast('Cache limpo. Você está usando a versão mais nova do Foliuma.'),900); } }catch(_){} setTimeout(()=>fixOneNoteDates(),1200); setTimeout(()=>{ if(!remoteOk) offerFixSections(); },4000);
 if(!authCfg()&&!tree.settings.authAsked){ setTimeout(()=>{ if(authCfg()||document.body.classList.contains('locked'))return; tree.settings.authAsked=true; saveTree(); toast('Proteja o Foliuma com login e senha.',{label:'Criar login',fn:()=>setupAuth()}); },2500); }
 initRemote();
 setTimeout(checkDue,2500); setInterval(checkDue,30000);
+});
 (async()=>{ try{ if(!window.claude||typeof window.claude.use!=='function')return;
   const [s,d]=await Promise.all([window.claude.use('sample'),window.claude.use('downloads')]);
   if(s){sampleFn=s;$('#aiBtn').hidden=false}

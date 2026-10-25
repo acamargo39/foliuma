@@ -20,7 +20,13 @@
   var ready = (async function () {
     if (!configured || !window.supabase || !window.supabase.createClient) return { sb: null, session: null };
     sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true,
+        // armazenamento explícito: sem isso, com o localStorage cheio a biblioteca guarda a sessão só na memória e o login some ao recarregar
+        storage: {
+          getItem: function (k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
+          setItem: function (k, v) { try { window.localStorage.setItem(k, v); } catch (e) { try { sessionStorage.setItem(k, v); } catch (e2) {} console.warn('Foliuma: sem espaço para salvar a sessão no localStorage.', e); } },
+          removeItem: function (k) { try { window.localStorage.removeItem(k); } catch (e) {} try { sessionStorage.removeItem(k); } catch (e2) {} }
+        } }
     });
     try {
       var r = await sb.auth.getSession();
@@ -303,7 +309,7 @@
   function confirmInline(btn, label) { if (btn.dataset.ok) return true; btn.dataset.ok = '1'; var old = btn.textContent; btn.textContent = label; btn.classList.add('danger'); setTimeout(function () { if (btn.isConnected) { delete btn.dataset.ok; btn.textContent = old; btn.classList.remove('danger'); } }, 4000); return false; }
   function clearDevice() {
     try { Object.keys(localStorage).filter(function (k) { return k.indexOf(LS) === 0; }).forEach(function (k) { localStorage.removeItem(k); }); } catch (e) {}
-    try { indexedDB.deleteDatabase('cadernoplus'); } catch (e) {}
+    try { indexedDB.deleteDatabase('cadernoplus'); indexedDB.deleteDatabase('foliuma-pages'); } catch (e) {}
   }
   async function openAccount() {
     var r = await ready;
