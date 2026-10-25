@@ -128,6 +128,12 @@ kbd{font-family:var(--sans);font-size:11px;border:1px solid var(--line);border-b
 .sharedchip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);padding:2px 8px;border-radius:999px}
 .mobonly{display:none !important}
 .pgbtn{display:none !important}
+.deskonly{display:inline-grid}
+.app.fullview #togglePagesBtn{display:none}
+@media (min-width:1001px){ .app.norail{grid-template-columns:minmax(0,1fr)} .app.norail .rail{display:none} }
+@media (min-width:761px){ .app.nopages .work{grid-template-columns:minmax(0,1fr)} .app.nopages .pages{display:none} }
+@media (max-width:1000px){ #toggleRailBtn{display:none} }
+@media (max-width:760px){ #togglePagesBtn{display:none} }
 
 /* ---------- Pages column ---------- */
 .pages{--c:#888;background:var(--surface2);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
@@ -973,6 +979,7 @@ body:has(.ai.show) .fab,body:has(.overlay.show) .fab,body:has(.recorder.show) .f
 
   <main class="main">
     <header class="topbar">
+      <button class="iconbtn deskonly" id="toggleRailBtn" title="Ocultar menu lateral (Ctrl Alt M)" aria-label="Ocultar menu lateral"><svg class="i"><use href="#i-sidebar"/></svg></button><button class="iconbtn deskonly" id="togglePagesBtn" title="Ocultar lista de páginas (Ctrl Alt P)" aria-label="Ocultar lista de páginas"><svg class="i"><use href="#i-pagescol"/></svg></button>
       <button class="iconbtn mobonly" id="railToggle" title="Menu"><svg class="i"><use href="#i-menu"/></svg></button>
       <button class="iconbtn pgbtn" id="pagesToggle" title="Páginas"><svg class="i"><use href="#i-pages"/></svg></button>
       <nav class="tabs" id="tabs" aria-label="Seções"></nav>
@@ -1070,6 +1077,8 @@ body:has(.ai.show) .fab,body:has(.overlay.show) .fab,body:has(.recorder.show) .f
   <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
   <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
   <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 6.1A9.6 9.6 0 0 1 12 6c5 0 8.5 4 9.5 6-.4.8-1.2 2-2.3 3.1M6.3 7.4C4.4 8.7 3.1 10.5 2.5 12c1 2 4.5 6 9.5 6 1.6 0 3-.4 4.3-1M9.9 10a3 3 0 0 0 4.2 4.2"/></symbol>
+  <symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15M5.8 8.5h1.6M5.8 11.5h1.6"/></symbol>
+  <symbol id="i-pagescol" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M8.5 4.5v15M10.8 8.5h6.4M10.8 12h6.4M10.8 15.5h4"/></symbol>
   <symbol id="i-sort" viewBox="0 0 24 24"><path d="M7 4v16M4 17l3 3 3-3M17 20V4M14 7l3-3 3 3"/></symbol>
   <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M20 16l-5-5-8 8"/></symbol>
 </svg>
@@ -1377,6 +1386,7 @@ function railMenu(anchor){ const rc=railCfg(); const tog=k=>{ rc[k]=!rc[k]; save
   showMenu(anchor,[{type:'label',label:'Páginas do menu (Início fica sempre)'},
     ...RAIL_VIEWS.map(([k,l,ic])=>({label:l,icon:ic,k:hv[k]?'oculta':'',checked:!hv[k],action:()=>togView(k)})),
     {label:allHidden?'Mostrar todas as páginas':'Ocultar todas, menos Início',icon:'eyeoff',action:()=>{ if(allHidden) rc.hideViews={}; else { rc.hideViews={}; RAIL_VIEWS.forEach(([k])=>rc.hideViews[k]=true); } saveTree(); renderRail(); toast(allHidden?'Todas as páginas voltaram ao menu.':'Páginas ocultas. Elas continuam acessíveis pela busca (Ctrl K) e pelo botão de ajustes.'); }},
+    {sep:true},{type:'label',label:'Painéis'},{label:'Menu lateral',icon:'sidebar',k:layoutCfg().norail?'oculto':'',checked:!layoutCfg().norail,action:()=>toggleLayout('norail')},{label:'Lista de páginas',icon:'pagescol',k:layoutCfg().nopages?'oculta':'',checked:!layoutCfg().nopages,action:()=>toggleLayout('nopages')},
     {sep:true},...sortMenuItems('notebooks','Ordenar cadernos por',true),
     {sep:true},{type:'label',label:'Seções'},
     {label:'Favoritos',icon:'spark',k:rc.hideFav?'oculto':'visível',checked:!rc.hideFav,action:()=>tog('hideFav')},
@@ -4030,7 +4040,7 @@ async function importOneNote(){
 /* ================= Search palette ================= */
 const COMMANDS=[
   {label:'Nova página',run:()=>{tree.cur.view='page';newPage()}},{label:'Nova seção',run:newSection},{label:'Novo caderno',run:newNotebook},
-  {label:'Ir para Início',run:()=>setView('home')},{label:'Abrir Hoje',run:()=>setView('today')},{label:'Login e senha',run:()=>setTimeout(()=>authCfg()?manageAuth():setupAuth(),60)},{label:'Bloquear agora',run:()=>{ if(authCfg()) setTimeout(()=>lockNow(false),60); else toast('Crie um login primeiro (menu ⋯ → Criar login e senha).'); }},{label:'Abrir Links',run:()=>setView('links')},{label:'Histórico de versões desta página',run:()=>{ const p=tree.cur.view==='page'&&curPage(); if(p) setTimeout(()=>versionsDialog(p.id),60); else toast('Abra uma página primeiro.'); }},{label:'Salvar versão com nome',run:()=>{ const p=tree.cur.view==='page'&&curPage(); if(!p){ toast('Abra uma página primeiro.'); return } setTimeout(async()=>{ const n=await askText('Salvar versão com nome','','Ex.: Enviado ao cliente'); if(n) saveNamedVersion(p.id,n); },60); }},{label:'Captura rápida',run:()=>setTimeout(()=>openCapture(),60)},{label:'Abrir Caixa de entrada',run:()=>{ const f=inboxPage(true); openPage(f.page.id); }},{label:'Abrir Tarefas',run:()=>setView('tasks')},{label:'Abrir Lembretes',run:()=>setView('reminders')},{label:'Abrir Tags',run:()=>setView('tags')},{label:'Abrir Calendário',run:()=>setView('calendar')},{label:'Abrir Atividades',run:()=>setView('activities')},{label:'Abrir Relatórios',run:()=>setView('reports')},{label:'Pausar cronômetro',run:()=>{ if(timerNow())stopTimer({}); else toast('Nenhum cronômetro rodando.'); }},{label:'Novo quadro Kanban',run:()=>{tree.cur.view='page';newPage({kind:'board',title:'Novo quadro',icon:'📋'})}},{label:'Abrir Lixeira',run:()=>setView('trash')},
+  {label:'Ir para Início',run:()=>setView('home')},{label:'Abrir Hoje',run:()=>setView('today')},{label:'Mostrar/ocultar menu lateral',run:()=>toggleLayout('norail')},{label:'Mostrar/ocultar lista de páginas',run:()=>toggleLayout('nopages')},{label:'Login e senha',run:()=>setTimeout(()=>authCfg()?manageAuth():setupAuth(),60)},{label:'Bloquear agora',run:()=>{ if(authCfg()) setTimeout(()=>lockNow(false),60); else toast('Crie um login primeiro (menu ⋯ → Criar login e senha).'); }},{label:'Abrir Links',run:()=>setView('links')},{label:'Histórico de versões desta página',run:()=>{ const p=tree.cur.view==='page'&&curPage(); if(p) setTimeout(()=>versionsDialog(p.id),60); else toast('Abra uma página primeiro.'); }},{label:'Salvar versão com nome',run:()=>{ const p=tree.cur.view==='page'&&curPage(); if(!p){ toast('Abra uma página primeiro.'); return } setTimeout(async()=>{ const n=await askText('Salvar versão com nome','','Ex.: Enviado ao cliente'); if(n) saveNamedVersion(p.id,n); },60); }},{label:'Captura rápida',run:()=>setTimeout(()=>openCapture(),60)},{label:'Abrir Caixa de entrada',run:()=>{ const f=inboxPage(true); openPage(f.page.id); }},{label:'Abrir Tarefas',run:()=>setView('tasks')},{label:'Abrir Lembretes',run:()=>setView('reminders')},{label:'Abrir Tags',run:()=>setView('tags')},{label:'Abrir Calendário',run:()=>setView('calendar')},{label:'Abrir Atividades',run:()=>setView('activities')},{label:'Abrir Relatórios',run:()=>setView('reports')},{label:'Pausar cronômetro',run:()=>{ if(timerNow())stopTimer({}); else toast('Nenhum cronômetro rodando.'); }},{label:'Novo quadro Kanban',run:()=>{tree.cur.view='page';newPage({kind:'board',title:'Novo quadro',icon:'📋'})}},{label:'Abrir Lixeira',run:()=>setView('trash')},
   {label:'Importar do OneNote',run:()=>importOneNote()},{label:'Gravar áudio na página',run:()=>startRecording()},{label:'Alternar tema claro/escuro',run:()=>toggleTheme()},{label:'Modo foco',run:()=>toggleFocus()},{label:'Fazer backup de tudo',run:()=>backup()}];
 function openPalette(){
   const ov=$('#overlay'); ov.innerHTML=`<div class="dialog palette" role="dialog" aria-label="Buscar"><input id="pq" placeholder="Buscar páginas, textos, #tags ou comandos…" autocomplete="off"><div class="presults" id="pr"></div></div>`;
@@ -4228,6 +4238,8 @@ document.addEventListener('keydown',e=>{
   const mod=e.ctrlKey||e.metaKey;
   if(mod&&e.shiftKey&&(e.key==='l'||e.key==='L')&&authCfg()){ e.preventDefault(); lockNow(false); return }
   if(mod&&(e.key==='k'||e.key==='K')){e.preventDefault();openPalette();return}
+  if(e.ctrlKey&&e.altKey&&!e.metaKey&&e.code==='KeyM'){ e.preventDefault(); toggleLayout('norail'); return }
+  if(e.ctrlKey&&e.altKey&&!e.metaKey&&e.code==='KeyP'){ e.preventDefault(); toggleLayout('nopages'); return }
   if(mod&&!e.shiftKey&&(e.key==='s'||e.key==='S')){ e.preventDefault(); const p=tree.cur.view==='page'&&curPage(); if(p&&canEditPage(p.id)) saveNamedVersion(p.id,''); return }
   if((mod&&e.altKey&&e.code==='KeyN')||(!mod&&!e.altKey&&!e.shiftKey&&(e.key==='n'||e.key==='N')&&!e.target.closest('input,textarea,select,[contenteditable="true"]')&&!$('#overlay').classList.contains('show')&&!menuEl.classList.contains('show'))){ e.preventDefault(); openCapture(); return }
   if(mod&&e.key==='.'){e.preventDefault();toggleFocus();return}
@@ -4238,7 +4250,14 @@ window.addEventListener('pagehide',()=>flushEditor());
 window.addEventListener('beforeunload',()=>{ if(editor&&curPage()&&canEditPage(curPage().id)){const d=getPage(curPage().id);d.html=serializeEditor();lsSet('p:'+curPage().id,d)} });
 
 /* ================= Boot ================= */
-function renderAll(){ fixCur(); renderRail(); renderTabs(); renderPages(); renderEditor(); syncBottomNav(); }
+function layoutCfg(){ return tree.settings.layout=tree.settings.layout||{}; }
+function applyLayout(){ const L=layoutCfg(); app.classList.toggle('norail',!!L.norail); app.classList.toggle('nopages',!!L.nopages);
+  const r=$('#toggleRailBtn'), p=$('#togglePagesBtn');
+  if(r){ r.classList.toggle('on',!!L.norail); r.title=(L.norail?'Mostrar':'Ocultar')+' menu lateral (Ctrl Alt M)'; r.setAttribute('aria-label',r.title); r.setAttribute('aria-pressed',L.norail?'true':'false'); }
+  if(p){ p.classList.toggle('on',!!L.nopages); p.title=(L.nopages?'Mostrar':'Ocultar')+' lista de páginas (Ctrl Alt P)'; p.setAttribute('aria-label',p.title); p.setAttribute('aria-pressed',L.nopages?'true':'false'); } }
+function toggleLayout(k){ const L=layoutCfg(); L[k]=!L[k]; if(!L[k]) delete L[k]; saveTree(); applyLayout(); toast(k==='norail'?(L.norail?'Menu lateral oculto. Use o botão no topo ou Ctrl Alt M para mostrar.':'Menu lateral visível.'):(L.nopages?'Lista de páginas oculta. Use o botão no topo ou Ctrl Alt P para mostrar.':'Lista de páginas visível.')); }
+document.addEventListener('click',e=>{ if(e.target.closest('#toggleRailBtn')) toggleLayout('norail'); else if(e.target.closest('#togglePagesBtn')) toggleLayout('nopages'); });
+function renderAll(){ applyLayout(); fixCur(); renderRail(); renderTabs(); renderPages(); renderEditor(); syncBottomNav(); }
 applyTheme(); fixCur(); renderAll(); setSync(); timerRefresh(); checkAuthGate(); setTimeout(()=>fixOneNoteDates(),1200);
 if(!authCfg()&&!tree.settings.authAsked){ setTimeout(()=>{ if(authCfg()||document.body.classList.contains('locked'))return; tree.settings.authAsked=true; saveTree(); toast('Proteja o Foliuma com login e senha.',{label:'Criar login',fn:()=>setupAuth()}); },2500); }
 initRemote();
