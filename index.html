@@ -1290,7 +1290,13 @@ async function initRemote(){
     const snap=await db.collection('data/users/'+id).limit(1000).get();
     const remote={}; snap.docs.forEach(doc=>{remote[doc.id]=doc.data()});
     let changed=false;
-    if(remote.tree&&Array.isArray(remote.tree.notebooks)&&isPristineSeed()){ backupTree('modelo inicial'); tree=remote.tree; normTree(); syncTags(); applyTheme(); fixCur(); lsSet('tree',tree); changed=true; }
+    /* aparelho novo: o caderno de boas-vindas criado aqui não deve ir para a conta que já tem cadernos */
+    let adopt=false;
+    if(remote.tree&&Array.isArray(remote.tree.notebooks)&&remote.tree.notebooks.length&&tree.seedIds){
+      const own=tree.notebooks.filter(nb=>isSeedNotebook(nb)&&nb.sections.every(s=>s.pages.every(p=>tree.seedIds.includes(p.id))));
+      if(own.length){ dropNotebooks(own,false); changed=true; adopt=!tree.notebooks.length&&!(tree.trash||[]).length; }
+    }
+    if(remote.tree&&Array.isArray(remote.tree.notebooks)&&(adopt||isPristineSeed())){ backupTree('modelo inicial'); tree=remote.tree; normTree(); syncTags(); applyTheme(); fixCur(); lsSet('tree',tree); changed=true; }
     else if(remote.tree&&Array.isArray(remote.tree.notebooks)){ const mg=mergeTrees(tree,remote.tree); if(mg.changedLocal){ backupTree('mesclagem'); const keepCur=tree.cur; tree=mg.tree; normTree(); syncTags(); applyTheme(); tree.cur=keepCur; fixCur(); lsSet('tree',tree); changed=true; } if(mg.changedRemote) setTimeout(()=>queue(userPath('tree'),()=>tree),0); }
     if(false){
       const keepCur=tree.cur; tree=remote.tree; normTree(); syncTags(); applyTheme(); tree.cur=keepCur; lsSet('tree',tree); changed=true;
@@ -1303,6 +1309,7 @@ async function initRemote(){
     if(!remote.tree||(remote.tree.updatedAt||0)<(tree.updatedAt||0)) queue(userPath('tree'),()=>tree);
     const priv=[]; tree.notebooks.forEach(nb=>nb.sections.forEach(s=>s.pages.forEach(p=>priv.push(p.id)))); tree.trash.forEach(t=>priv.push(t.page.id));
     priv.forEach(pid=>{const l=getPage(pid),r=remote['p_'+pid]; if(l.updatedAt&&(!r||(l.updatedAt||0)>(r.updatedAt||0))) queue(userPath('p_'+pid),()=>getPage(pid))});
+    const dupes=cleanSeedDuplicates(); if(dupes){ changed=true; setTimeout(()=>toast(`Removi ${dupes} cópia(s) repetida(s) de “Meu caderno” criadas ao entrar em outros aparelhos.`),1500); }
     if(changed){ fixCur(); renderAll(); } else { renderRail(); }
     timerRefresh(); checkAuthGate(); setTimeout(()=>fixOneNoteDates(),800); setTimeout(offerFixSections,3500);
     setSync();
@@ -2916,12 +2923,41 @@ function purge(pid){ markDeleted([pid]); delete pageCache[pid]; lsDel('p:'+pid);
 function markDeleted(ids){ tree.deleted=tree.deleted||[]; const t=Date.now(); ids.forEach(id=>tree.deleted.push({id,t})); if(tree.deleted.length>3000) tree.deleted=tree.deleted.slice(-3000); }
 function treePageIds(T){ const ids=[]; (T.notebooks||[]).forEach(nb=>(nb.sections||[]).forEach(s=>(s.pages||[]).forEach(p=>ids.push(p.id)))); return ids; }
 function isPristineSeed(){ if(!tree.seedIds) return false; const ids=treePageIds(tree); if((tree.trash||[]).length||tree.notebooks.length!==1||ids.length!==tree.seedIds.length) return false; return ids.every(id=>tree.seedIds.includes(id)&&(getPage(id).updatedAt||0)<=(tree.seedAt||0)+2000); }
+/* caderno de boas-vindas: detecta cópias intactas criadas automaticamente em cada aparelho */
+function seedSig(s){ return norm(s).replace(/caderno\+/g,'foliuma').replace(/[^a-z0-9]/g,''); }
+function seedPageUntouched(pg){
+  const T={'Bem-vindo ao Foliuma':'w','Bem-vindo ao Caderno+':'w','Lista da semana':'l','Ideias soltas':'i'}[pg.title]; if(!T) return false;
+  const d=getPage(pg.id); if((d.strokes||[]).length||d.board||d.kind==='board') return false;
+  const s=seedSig(htmlText(d.html||'')); if(!s) return true;
+  if(T==='l') return s===seedSig('Revisar anotações da reunião Enviar orçamento Organizar cadernos');
+  if(T==='i') return s===seedSig('Escreva livremente aqui. Experimente o modo de desenho para rabiscar diagramas.');
+  const w=seedSig(htmlText(WELCOME)); return s===w||(/ofoliumafuncionacomoonenote/.test(s)&&s.length<=w.length+20);
+}
+function isSeedNotebook(nb){
+  if(!nb||nb.shared||nb.name!=='Meu caderno') return false;
+  const secs=nb.sections||[]; if(!secs.length||!secs.every(s=>['Início','Projetos','Estudos'].includes(s.name))) return false;
+  return secs.every(s=>(s.pages||[]).every(seedPageUntouched));
+}
+function dropNotebooks(list,synced){
+  const ids=new Set(list.map(nb=>nb.id));
+  list.forEach(nb=>nb.sections.forEach(s=>s.pages.forEach(p=>{ if(synced) purge(p.id); else { delete pageCache[p.id]; lsDel('p:'+p.id); } })));
+  if(synced) markDeleted(list.flatMap(nb=>[nb.id,...nb.sections.map(s=>s.id)]));
+  tree.notebooks=tree.notebooks.filter(nb=>!ids.has(nb.id)); delete tree.seedIds;
+}
+/* remove os “Meu caderno” repetidos que já foram sincronizados (mantém um se não houver outro igual com conteúdo) */
+function cleanSeedDuplicates(){
+  const seeds=tree.notebooks.filter(isSeedNotebook); if(!seeds.length) return 0;
+  const keepOne=!tree.notebooks.some(nb=>nb.name==='Meu caderno'&&!seeds.includes(nb));
+  const extra=keepOne?seeds.slice(1):seeds; if(!extra.length) return 0;
+  backupTree('limpeza de duplicados'); dropNotebooks(extra,true); fixCur(); saveTree(); return extra.length;
+}
 async function backupTree(reason){ try{ const list=(await idb.get('treebak'))||[]; list.unshift({t:Date.now(),reason,tree:clone(tree)}); await idb.put('treebak',list.slice(0,5)); }catch(_){} }
 function structKey(T){ return JSON.stringify({n:(T.notebooks||[]).map(nb=>[nb.id,nb.name,(nb.sections||[]).map(s=>[s.id,(s.pages||[]).map(p=>p.id)])]),t:(T.trash||[]).map(x=>x.page.id)}); }
 function mergeTrees(L,R){
   const remoteNewer=(R.updatedAt||0)>=(L.updatedAt||0); const base=clone(remoteNewer?R:L), other=remoteNewer?L:R;
   base.notebooks=base.notebooks||[]; base.trash=base.trash||[];
   const dead=new Set(); [...(L.deleted||[]),...(R.deleted||[])].forEach(d=>dead.add(d.id||d));
+  base.notebooks=base.notebooks.filter(nb=>!dead.has(nb.id));
   const seenDel=new Set(); base.deleted=[...(L.deleted||[]),...(R.deleted||[])].filter(d=>{ const k=(d.id||d)+'|'+(d.t||0); if(seenDel.has(k))return false; seenDel.add(k); return true; }).slice(-3000);
   const trashed=new Set(base.trash.map(t=>t.page.id)); (other.trash||[]).forEach(t=>trashed.add(t.page.id));
   const nbMap=new Map(), secMap=new Map(), pageIds=new Set(base.trash.map(t=>t.page.id));
