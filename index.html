@@ -159,6 +159,12 @@ kbd{font-family:var(--sans);font-size:11px;border:1px solid var(--line);border-b
 .pg .more{opacity:0;align-self:center;width:26px;height:26px}
 .pg:hover .more,.pg.on .more{opacity:1}
 .pg.lv1{margin-left:16px}.pg.lv2{margin-left:32px}
+#pgList.compact .pg{padding:4px 8px;margin-bottom:1px;gap:7px;align-items:center;border-radius:7px}
+#pgList.compact .pg .s{display:none}
+#pgList.compact .pg .t{font-weight:500;font-size:13.5px;line-height:1.35}
+#pgList.compact .pg .pic{transform:scale(.78);margin:0 -2px}
+#pgList.compact .pg .more{width:24px;height:24px}
+#pgList.compact .pg.lv1{margin-left:12px}#pgList.compact .pg.lv2{margin-left:24px}
 .pg.dragover{box-shadow:inset 0 2px 0 var(--accent)}
 
 /* ---------- Editor shell ---------- */
@@ -998,7 +1004,7 @@ body:has(.ai.show) .fab,body:has(.overlay.show) .fab,body:has(.recorder.show) .f
     </header>
     <div class="work">
       <section class="pages" id="pagesCol" aria-label="Páginas">
-        <div class="pghead"><h2 id="secName"></h2><button class="iconbtn" id="pgSort" title="Ordenar páginas e seções"><svg class="i"><use href="#i-sort"/></svg></button><button class="iconbtn" id="secMore" title="Opções da seção"><svg class="i"><use href="#i-dots"/></svg></button></div>
+        <div class="pghead"><h2 id="secName"></h2><button class="iconbtn" id="pgCompact" title="Lista compacta (só títulos)" aria-label="Lista compacta"><svg class="i"><use href="#i-compact"/></svg></button><button class="iconbtn" id="pgSort" title="Ordenar páginas e seções"><svg class="i"><use href="#i-sort"/></svg></button><button class="iconbtn" id="secMore" title="Opções da seção"><svg class="i"><use href="#i-dots"/></svg></button></div>
         <div class="pgtools"><input class="pgfilter" id="pgFilter" placeholder="Filtrar páginas" aria-label="Filtrar páginas"><button class="newpage" id="newPageBtn" title="Nova página (Alt N)"><svg class="i"><use href="#i-plus"/></svg>Nova</button></div>
         <div class="pglist" id="pgList"></div>
       </section>
@@ -1086,6 +1092,7 @@ body:has(.ai.show) .fab,body:has(.overlay.show) .fab,body:has(.recorder.show) .f
   <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 6.1A9.6 9.6 0 0 1 12 6c5 0 8.5 4 9.5 6-.4.8-1.2 2-2.3 3.1M6.3 7.4C4.4 8.7 3.1 10.5 2.5 12c1 2 4.5 6 9.5 6 1.6 0 3-.4 4.3-1M9.9 10a3 3 0 0 0 4.2 4.2"/></symbol>
   <symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15M5.8 8.5h1.6M5.8 11.5h1.6"/></symbol>
   <symbol id="i-pagescol" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M8.5 4.5v15M10.8 8.5h6.4M10.8 12h6.4M10.8 15.5h4"/></symbol>
+  <symbol id="i-compact" viewBox="0 0 24 24"><path d="M5 6h14M5 10h14M5 14h14M5 18h14"/></symbol>
   <symbol id="i-sort" viewBox="0 0 24 24"><path d="M7 4v16M4 17l3 3 3-3M17 20V4M14 7l3-3 3 3"/></symbol>
   <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M20 16l-5-5-8 8"/></symbol>
 </svg>
@@ -1425,7 +1432,7 @@ function railMenu(anchor){ const rc=railCfg(); const tog=k=>{ rc[k]=!rc[k]; save
     {label:(rc.colFav&&rc.colRec&&rc.colNb)?'Expandir seções':'Recolher seções',icon:'chev',disabled:rc.hideFav&&rc.hideRec&&rc.hideNb,action:()=>{ const v=!(rc.colFav&&rc.colRec&&rc.colNb); rc.colFav=v; rc.colRec=v; rc.colNb=v; saveTree(); renderRail(); }},
     {label:'Mostrar tudo',disabled:!rc.hideFav&&!rc.hideRec&&!rc.hideNb&&!rc.colFav&&!rc.colRec&&!rc.colNb&&!anyHidden,action:()=>{ delete tree.settings.rail; saveTree(); renderRail(); }}]); }
 $('#railCustom').addEventListener('click',e=>railMenu(e.currentTarget));
-setTimeout(()=>{ const b=$('#pgSort'); if(b) b.addEventListener('click',e=>pagesSortMenu(e.currentTarget)); },0);
+setTimeout(()=>{ const b=$('#pgSort'); if(b) b.addEventListener('click',e=>pagesSortMenu(e.currentTarget)); const c=$('#pgCompact'); if(c) c.addEventListener('click',()=>setPagesCompact(!tree.settings.pagesCompact)); },0);
 
 /* ================= Tabs ================= */
 const VIEW_NAMES={links:'Links',today:'Hoje',activities:'Atividades',reports:'Relatórios',calendar:'Calendário',home:'Início',tasks:'Tarefas',reminders:'Lembretes',tags:'Tags',trash:'Lixeira'};
@@ -1457,7 +1464,7 @@ function renderPages(){
   const sortedOn=sortCfg('pages').k!=='manual'; const base=sortedPages(s); refreshSortBtn();
   const pages=q?base.filter(p=>norm(p.title).includes(q)||norm(snippet(p.id,2000)).includes(q)):base;
   list.innerHTML=pages.length?pages.map(p=>{ const sn=snippet(p.id);
-    return `<div class="pg lv${(q||sortedOn)?0:(p.level||0)} ${p.id===tree.cur.page?'on':''}" draggable="${(q||sortedOn)?'false':'true'}" data-pid="${p.id}"><span class="pic ${p.icon?'':'dot'}">${p.icon?esc(p.icon):''}</span><div class="body"><div class="t ${p.title?'':'untitled'}"><span>${esc(p.title||'Sem título')}</span>${p.fav?'<span class="star">★</span>':''}</div><div class="s">${pageListMeta(p)}${esc(pageDateLabel(p))}${sn?' · '+esc(sn):''}</div></div><button class="iconbtn more" data-pmenu="${p.id}" title="Opções da página">${icon('dots')}</button></div>`}).join(''):`<p class="hint" style="padding:10px">${q?'Nenhuma página encontrada.':'Nenhuma página nesta seção ainda.'}</p>`;
+    return `<div class="pg lv${(q||sortedOn)?0:(p.level||0)} ${p.id===tree.cur.page?'on':''}" title="${tree.settings.pagesCompact?esc(p.title||'Sem título'):''}" draggable="${(q||sortedOn)?'false':'true'}" data-pid="${p.id}"><span class="pic ${p.icon?'':'dot'}">${p.icon?esc(p.icon):''}</span><div class="body"><div class="t ${p.title?'':'untitled'}"><span>${esc(p.title||'Sem título')}</span>${p.fav?'<span class="star">★</span>':''}</div><div class="s">${pageListMeta(p)}${esc(pageDateLabel(p))}${sn?' · '+esc(sn):''}</div></div><button class="iconbtn more" data-pmenu="${p.id}" title="Opções da página">${icon('dots')}</button></div>`}).join(''):`<p class="hint" style="padding:10px">${q?'Nenhuma página encontrada.':'Nenhuma página nesta seção ainda.'}</p>`;
 }
 const renderPagesLight=debounce(()=>renderPages(),600);
 const pgList=$('#pgList');
@@ -3006,11 +3013,14 @@ function sortMenuItems(kind,label,withCount){
   return items;
 }
 function pagesSortMenu(anchor){ const d=tree.settings.listShow||'updated'; const show=v=>{ tree.settings.listShow=v; saveTree(); renderPages(); };
-  showMenu(anchor,[...sortMenuItems('pages','Ordenar páginas por'),{sep:true},...sortMenuItems('sections','Ordenar seções (abas) por',true),{sep:true},{type:'label',label:'Data exibida na lista de páginas'},
+  const cp=!!tree.settings.pagesCompact;
+  showMenu(anchor,[{type:'label',label:'Exibição da lista'},{label:'Normal (título, data e trecho)',icon:'ul',checked:!cp,action:()=>setPagesCompact(false)},{label:'Compacta (só títulos)',icon:'compact',checked:cp,action:()=>setPagesCompact(true)},{sep:true},...sortMenuItems('pages','Ordenar páginas por'),{sep:true},...sortMenuItems('sections','Ordenar seções (abas) por',true),{sep:true},{type:'label',label:'Data exibida na lista de páginas'},
     {label:'Modificação (relativa)',checked:d==='updated',action:()=>show('updated')},{label:'Criação',checked:d==='created',action:()=>show('created')},{label:'Criação e modificação completas',checked:d==='full',action:()=>show('full')},{label:'Não mostrar data',checked:d==='none',action:()=>show('none')}]); }
 function pageDateLabel(p){ const d=tree.settings.listShow||'updated'; if(d==='none')return ''; const day=t=>t?new Date(t).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'—';
   if(d==='created') return 'Criada '+day(p.created); if(d==='full') return `Criada ${day(p.created)} · editada ${day(p.updated||p.created)}`; return fmtRel(p.updated||p.created); }
-function refreshSortBtn(){ const b=$('#pgSort'); if(!b)return; const c=sortCfg('pages'); b.classList.toggle('on',c.k!=='manual'||sortCfg('sections').k!=='manual'); b.title=c.k==='manual'?'Ordenar páginas e seções':`Páginas ordenadas por ${({created:'data de criação',updated:'data de modificação',title:'título'})[c.k]}`; }
+function setPagesCompact(on){ tree.settings.pagesCompact=!!on; if(!on) delete tree.settings.pagesCompact; saveTree(); renderPages(); toast(on?'Lista compacta: só os títulos das páginas.':'Lista normal: título, data e trecho.'); }
+function refreshSortBtn(){ const cp=!!tree.settings.pagesCompact; const lst=$('#pgList'); if(lst) lst.classList.toggle('compact',cp); const bc=$('#pgCompact'); if(bc){ bc.classList.toggle('on',cp); bc.title=cp?'Voltar à lista normal (título, data e trecho)':'Lista compacta (só títulos)'; bc.setAttribute('aria-pressed',cp?'true':'false'); }
+  const b=$('#pgSort'); if(!b)return; const c=sortCfg('pages'); b.classList.toggle('on',c.k!=='manual'||sortCfg('sections').k!=='manual'); b.title=c.k==='manual'?'Ordenar páginas e seções':`Páginas ordenadas por ${({created:'data de criação',updated:'data de modificação',title:'título'})[c.k]}`; }
 
 /* ================= Reorganizar importações com várias seções ================= */
 const SECMARK_ONE=/^⟦seção:([^⟧]+)⟧$/, SECMARK_ANY=/⟦seção:[^⟧]+⟧/;
@@ -4167,7 +4177,7 @@ async function importOneNote(){
 /* ================= Search palette ================= */
 const COMMANDS=[
   {label:'Nova página',run:()=>{tree.cur.view='page';newPage()}},{label:'Nova seção',run:newSection},{label:'Novo caderno',run:newNotebook},
-  {label:'Ir para Início',run:()=>setView('home')},{label:'Abrir Hoje',run:()=>setView('today')},{label:'Configurações',run:()=>setTimeout(settingsDialog,60)},{label:'Limpar cache do navegador',run:()=>setTimeout(settingsDialog,60)},{label:'Mostrar/ocultar menu lateral',run:()=>toggleLayout('norail')},{label:'Mostrar/ocultar lista de páginas',run:()=>toggleLayout('nopages')},{label:'Login e senha',run:()=>setTimeout(()=>authCfg()?manageAuth():setupAuth(),60)},{label:'Bloquear agora',run:()=>{ if(authCfg()) setTimeout(()=>lockNow(false),60); else toast('Crie um login primeiro (menu ⋯ → Criar login e senha).'); }},{label:'Abrir Links',run:()=>setView('links')},{label:'Histórico de versões desta página',run:()=>{ const p=tree.cur.view==='page'&&curPage(); if(p) setTimeout(()=>versionsDialog(p.id),60); else toast('Abra uma página primeiro.'); }},{label:'Salvar versão com nome',run:()=>{ const p=tree.cur.view==='page'&&curPage(); if(!p){ toast('Abra uma página primeiro.'); return } setTimeout(async()=>{ const n=await askText('Salvar versão com nome','','Ex.: Enviado ao cliente'); if(n) saveNamedVersion(p.id,n); },60); }},{label:'Captura rápida',run:()=>setTimeout(()=>openCapture(),60)},{label:'Abrir Caixa de entrada',run:()=>{ const f=inboxPage(true); openPage(f.page.id); }},{label:'Abrir Tarefas',run:()=>setView('tasks')},{label:'Abrir Lembretes',run:()=>setView('reminders')},{label:'Abrir Tags',run:()=>setView('tags')},{label:'Abrir Calendário',run:()=>setView('calendar')},{label:'Abrir Atividades',run:()=>setView('activities')},{label:'Abrir Relatórios',run:()=>setView('reports')},{label:'Pausar cronômetro',run:()=>{ if(timerNow())stopTimer({}); else toast('Nenhum cronômetro rodando.'); }},{label:'Novo quadro Kanban',run:()=>{tree.cur.view='page';newPage({kind:'board',title:'Novo quadro',icon:'📋'})}},{label:'Abrir Lixeira',run:()=>setView('trash')},
+  {label:'Ir para Início',run:()=>setView('home')},{label:'Abrir Hoje',run:()=>setView('today')},{label:'Lista de páginas compacta (só títulos)',run:()=>setPagesCompact(!tree.settings.pagesCompact)},{label:'Configurações',run:()=>setTimeout(settingsDialog,60)},{label:'Limpar cache do navegador',run:()=>setTimeout(settingsDialog,60)},{label:'Mostrar/ocultar menu lateral',run:()=>toggleLayout('norail')},{label:'Mostrar/ocultar lista de páginas',run:()=>toggleLayout('nopages')},{label:'Login e senha',run:()=>setTimeout(()=>authCfg()?manageAuth():setupAuth(),60)},{label:'Bloquear agora',run:()=>{ if(authCfg()) setTimeout(()=>lockNow(false),60); else toast('Crie um login primeiro (menu ⋯ → Criar login e senha).'); }},{label:'Abrir Links',run:()=>setView('links')},{label:'Histórico de versões desta página',run:()=>{ const p=tree.cur.view==='page'&&curPage(); if(p) setTimeout(()=>versionsDialog(p.id),60); else toast('Abra uma página primeiro.'); }},{label:'Salvar versão com nome',run:()=>{ const p=tree.cur.view==='page'&&curPage(); if(!p){ toast('Abra uma página primeiro.'); return } setTimeout(async()=>{ const n=await askText('Salvar versão com nome','','Ex.: Enviado ao cliente'); if(n) saveNamedVersion(p.id,n); },60); }},{label:'Captura rápida',run:()=>setTimeout(()=>openCapture(),60)},{label:'Abrir Caixa de entrada',run:()=>{ const f=inboxPage(true); openPage(f.page.id); }},{label:'Abrir Tarefas',run:()=>setView('tasks')},{label:'Abrir Lembretes',run:()=>setView('reminders')},{label:'Abrir Tags',run:()=>setView('tags')},{label:'Abrir Calendário',run:()=>setView('calendar')},{label:'Abrir Atividades',run:()=>setView('activities')},{label:'Abrir Relatórios',run:()=>setView('reports')},{label:'Pausar cronômetro',run:()=>{ if(timerNow())stopTimer({}); else toast('Nenhum cronômetro rodando.'); }},{label:'Novo quadro Kanban',run:()=>{tree.cur.view='page';newPage({kind:'board',title:'Novo quadro',icon:'📋'})}},{label:'Abrir Lixeira',run:()=>setView('trash')},
   {label:'Importar do OneNote',run:()=>importOneNote()},{label:'Gravar áudio na página',run:()=>startRecording()},{label:'Alternar tema claro/escuro',run:()=>toggleTheme()},{label:'Modo foco',run:()=>toggleFocus()},{label:'Fazer backup de tudo',run:()=>backup()}];
 function openPalette(){
   const ov=$('#overlay'); ov.innerHTML=`<div class="dialog palette" role="dialog" aria-label="Buscar"><input id="pq" placeholder="Buscar páginas, textos, #tags ou comandos…" autocomplete="off"><div class="presults" id="pr"></div></div>`;
