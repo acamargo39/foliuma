@@ -159,6 +159,7 @@ kbd{font-family:var(--sans);font-size:11px;border:1px solid var(--line);border-b
 .pg .more{opacity:0;align-self:center;width:26px;height:26px}
 .pg:hover .more,.pg.on .more{opacity:1}
 .pg.lv1{margin-left:16px}.pg.lv2{margin-left:32px}
+#editor.mono,#editor.mono p,#editor.mono li,#editor.mono td{font-family:var(--mono),ui-monospace,Menlo,Consolas,monospace;font-size:14px;letter-spacing:0}
 #pgList.compact .pg{padding:4px 8px;margin-bottom:1px;gap:7px;align-items:center;border-radius:7px}
 #pgList.compact .pg .s{display:none}
 #pgList.compact .pg .t{font-weight:500;font-size:13.5px;line-height:1.35}
@@ -1290,13 +1291,7 @@ async function initRemote(){
     const snap=await db.collection('data/users/'+id).limit(1000).get();
     const remote={}; snap.docs.forEach(doc=>{remote[doc.id]=doc.data()});
     let changed=false;
-    /* aparelho novo: o caderno de boas-vindas criado aqui não deve ir para a conta que já tem cadernos */
-    let adopt=false;
-    if(remote.tree&&Array.isArray(remote.tree.notebooks)&&remote.tree.notebooks.length&&tree.seedIds){
-      const own=tree.notebooks.filter(nb=>isSeedNotebook(nb)&&nb.sections.every(s=>s.pages.every(p=>tree.seedIds.includes(p.id))));
-      if(own.length){ dropNotebooks(own,false); changed=true; adopt=!tree.notebooks.length&&!(tree.trash||[]).length; }
-    }
-    if(remote.tree&&Array.isArray(remote.tree.notebooks)&&(adopt||isPristineSeed())){ backupTree('modelo inicial'); tree=remote.tree; normTree(); syncTags(); applyTheme(); fixCur(); lsSet('tree',tree); changed=true; }
+    if(remote.tree&&Array.isArray(remote.tree.notebooks)&&isPristineSeed()){ backupTree('modelo inicial'); tree=remote.tree; normTree(); syncTags(); applyTheme(); fixCur(); lsSet('tree',tree); changed=true; }
     else if(remote.tree&&Array.isArray(remote.tree.notebooks)){ const mg=mergeTrees(tree,remote.tree); if(mg.changedLocal){ backupTree('mesclagem'); const keepCur=tree.cur; tree=mg.tree; normTree(); syncTags(); applyTheme(); tree.cur=keepCur; fixCur(); lsSet('tree',tree); changed=true; } if(mg.changedRemote) setTimeout(()=>queue(userPath('tree'),()=>tree),0); }
     if(false){
       const keepCur=tree.cur; tree=remote.tree; normTree(); syncTags(); applyTheme(); tree.cur=keepCur; lsSet('tree',tree); changed=true;
@@ -1309,7 +1304,6 @@ async function initRemote(){
     if(!remote.tree||(remote.tree.updatedAt||0)<(tree.updatedAt||0)) queue(userPath('tree'),()=>tree);
     const priv=[]; tree.notebooks.forEach(nb=>nb.sections.forEach(s=>s.pages.forEach(p=>priv.push(p.id)))); tree.trash.forEach(t=>priv.push(t.page.id));
     priv.forEach(pid=>{const l=getPage(pid),r=remote['p_'+pid]; if(l.updatedAt&&(!r||(l.updatedAt||0)>(r.updatedAt||0))) queue(userPath('p_'+pid),()=>getPage(pid))});
-    const dupes=cleanSeedDuplicates(); if(dupes){ changed=true; setTimeout(()=>toast(`Removi ${dupes} cópia(s) repetida(s) de “Meu caderno” criadas ao entrar em outros aparelhos.`),1500); }
     if(changed){ fixCur(); renderAll(); } else { renderRail(); }
     timerRefresh(); checkAuthGate(); setTimeout(()=>fixOneNoteDates(),800); setTimeout(offerFixSections,3500);
     setSync();
@@ -1625,6 +1619,7 @@ function onRemotePage(pid,r){
 
 function bindEditor(){
   document.execCommand('defaultParagraphSeparator',false,'p');
+  editor.classList.toggle('mono',edCfg().font==='mono');
   if(!canEditPage(curPage().id)){ editor.addEventListener('click',onEditorClick); return }
   titleEl.addEventListener('input',()=>{const p=curPage();p.title=titleEl.value;p.updated=Date.now();renderPagesTitle(p);lastLocalEdit=Date.now();commitDeb()});
   titleEl.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();editor.focus();caretAt(editor.firstElementChild||editor,true)}});
@@ -1632,6 +1627,7 @@ function bindEditor(){
   editor.addEventListener('keydown',onEditorKey);
   editor.addEventListener('click',onEditorClick);
   editor.addEventListener('paste',onPaste);
+  editor.addEventListener('beforeinput',plainBeforeInput);
   editor.addEventListener('dragover',e=>{if([...e.dataTransfer.items||[]].some(i=>i.kind==='file'))e.preventDefault()});
   editor.addEventListener('drop',onDrop);
   editor.addEventListener('blur',()=>setTimeout(()=>{ if(!document.activeElement||!document.activeElement.closest('.slash'))closeSlash() },150));
@@ -1768,7 +1764,7 @@ function onEditorKey(e){
     if((/^H[1-3]$/.test(blk.tagName)||blk.tagName==='BLOCKQUOTE')&&!e.shiftKey){ const r=s.getRangeAt(0); const tail=document.createRange(); tail.setStart(r.endContainer,r.endOffset); tail.setEnd(blk,blk.childNodes.length);
       if(!tail.toString().length){ e.preventDefault(); const p=document.createElement('p'); p.innerHTML='<br>'; blk.after(p); caretAt(p,true); onEdit(); } }
   }
-  if(e.key===' '&&node&&node.nodeType===3&&blk&&blk.parentNode===editor&&/^(P|DIV)$/.test(blk.tagName)){
+  if(e.key===' '&&!edCfg().plain&&node&&node.nodeType===3&&blk&&blk.parentNode===editor&&/^(P|DIV)$/.test(blk.tagName)){
     const before=node.textContent.slice(0,s.anchorOffset);
     if(firstText(blk)===node&&/^(#{1,3}|-|\*|1\.|\[\]|\[ \]|>|```)$/.test(before)){
       e.preventDefault(); node.textContent=node.textContent.slice(s.anchorOffset); if(!node.textContent.length) node.remove();
@@ -1807,6 +1803,7 @@ const SLASH=[
   {g:'Inserir',k:'tags gerenciar personalizar',label:'Gerenciar tags',d:'Criar e editar tags',ic:'⚙',run:()=>tagManager()}];
 const tagSlash=()=>TAGS.map((t,i)=>({g:'Tags',k:'tag '+norm(t.label),label:t.label,d:i<9?'Ctrl Shift '+(i+1):'Tag',ic:`<span class="tagdot" style="background:${esc(t.c)}">${esc(t.g)}</span>`,run:()=>applyTag(t.id)}));
 function checkSlash(){
+  if(!edCfg().slash){ closeSlash(); return }
   const s=getSelection(); if(!editor||!s.rangeCount||!s.isCollapsed){closeSlash();return}
   const n=s.anchorNode; if(!n||n.nodeType!==3){closeSlash();return}
   const txt=n.textContent.slice(0,s.anchorOffset); const m=txt.match(/(^|\s)\/([^\s/]{0,24})$/);
@@ -1846,7 +1843,7 @@ $('#slash').addEventListener('mousedown',e=>{e.preventDefault();const r=e.target
 
 /* ----- bubble toolbar ----- */
 const bubble=$('#bubble');
-const bubbleCheck=debounce(()=>{
+const bubbleCheck=debounce(()=>{ if(!edCfg().bubble){ hideBubble(); return }
   const s=getSelection(); if(!editor||drawMode||!s.rangeCount||s.isCollapsed||!canEditPage(curPage()?.id)){hideBubble();return}
   const r=s.getRangeAt(0); if(!editor.contains(r.commonAncestorContainer)||!r.toString().trim()){hideBubble();return}
   const rc=r.getBoundingClientRect();
@@ -2086,6 +2083,7 @@ function onPaste(e){
   const files=[...cd.files||[]].filter(f=>f.type.startsWith('image/'));
   if(files.length){ e.preventDefault(); files.forEach(insertImageFile); return }
   const b=curBlock(); if(b&&b.tagName==='PRE'){ e.preventDefault(); document.execCommand('insertText',false,cd.getData('text/plain')); return }
+  if(edCfg().plain){ const t=cd.getData('text/plain'); if(t){ e.preventDefault(); insertPlainText(t); onEdit(); } return }
   const html=cd.getData('text/html');
   if(html){ e.preventDefault(); document.execCommand('insertHTML',false,sanitize(html)); onEdit(); }
 }
@@ -2253,6 +2251,7 @@ function pageMenu(pid,anchor,x,y){
     {sep:true},
     {label:'Comentários',icon:'users',action:()=>{openPage(pid);setTimeout(openComments,80)}},
     {label:'Histórico de versões…',icon:'clock',action:()=>versionsDialog(pid)},
+    {label:'Remover formatação da página',icon:'pen',disabled:ro,action:()=>clearPageFormatting(pid)},
     {label:'Salvar versão com nome…',icon:'tag',disabled:ro,action:async()=>{ const n=await askText('Salvar versão com nome','','Ex.: Enviado ao cliente'); if(n){ if(tree.cur.page!==pid) openPage(pid); saveNamedVersion(pid,n); } }},
     {label:'Salvar como modelo…',icon:'tpl',action:()=>saveAsTemplate(pid)},
     {label:'Exportar PDF',icon:'down',disabled:!downloads,action:()=>exportPdf('page',pid)},
@@ -2923,41 +2922,12 @@ function purge(pid){ markDeleted([pid]); delete pageCache[pid]; lsDel('p:'+pid);
 function markDeleted(ids){ tree.deleted=tree.deleted||[]; const t=Date.now(); ids.forEach(id=>tree.deleted.push({id,t})); if(tree.deleted.length>3000) tree.deleted=tree.deleted.slice(-3000); }
 function treePageIds(T){ const ids=[]; (T.notebooks||[]).forEach(nb=>(nb.sections||[]).forEach(s=>(s.pages||[]).forEach(p=>ids.push(p.id)))); return ids; }
 function isPristineSeed(){ if(!tree.seedIds) return false; const ids=treePageIds(tree); if((tree.trash||[]).length||tree.notebooks.length!==1||ids.length!==tree.seedIds.length) return false; return ids.every(id=>tree.seedIds.includes(id)&&(getPage(id).updatedAt||0)<=(tree.seedAt||0)+2000); }
-/* caderno de boas-vindas: detecta cópias intactas criadas automaticamente em cada aparelho */
-function seedSig(s){ return norm(s).replace(/caderno\+/g,'foliuma').replace(/[^a-z0-9]/g,''); }
-function seedPageUntouched(pg){
-  const T={'Bem-vindo ao Foliuma':'w','Bem-vindo ao Caderno+':'w','Lista da semana':'l','Ideias soltas':'i'}[pg.title]; if(!T) return false;
-  const d=getPage(pg.id); if((d.strokes||[]).length||d.board||d.kind==='board') return false;
-  const s=seedSig(htmlText(d.html||'')); if(!s) return true;
-  if(T==='l') return s===seedSig('Revisar anotações da reunião Enviar orçamento Organizar cadernos');
-  if(T==='i') return s===seedSig('Escreva livremente aqui. Experimente o modo de desenho para rabiscar diagramas.');
-  const w=seedSig(htmlText(WELCOME)); return s===w||(/ofoliumafuncionacomoonenote/.test(s)&&s.length<=w.length+20);
-}
-function isSeedNotebook(nb){
-  if(!nb||nb.shared||nb.name!=='Meu caderno') return false;
-  const secs=nb.sections||[]; if(!secs.length||!secs.every(s=>['Início','Projetos','Estudos'].includes(s.name))) return false;
-  return secs.every(s=>(s.pages||[]).every(seedPageUntouched));
-}
-function dropNotebooks(list,synced){
-  const ids=new Set(list.map(nb=>nb.id));
-  list.forEach(nb=>nb.sections.forEach(s=>s.pages.forEach(p=>{ if(synced) purge(p.id); else { delete pageCache[p.id]; lsDel('p:'+p.id); } })));
-  if(synced) markDeleted(list.flatMap(nb=>[nb.id,...nb.sections.map(s=>s.id)]));
-  tree.notebooks=tree.notebooks.filter(nb=>!ids.has(nb.id)); delete tree.seedIds;
-}
-/* remove os “Meu caderno” repetidos que já foram sincronizados (mantém um se não houver outro igual com conteúdo) */
-function cleanSeedDuplicates(){
-  const seeds=tree.notebooks.filter(isSeedNotebook); if(!seeds.length) return 0;
-  const keepOne=!tree.notebooks.some(nb=>nb.name==='Meu caderno'&&!seeds.includes(nb));
-  const extra=keepOne?seeds.slice(1):seeds; if(!extra.length) return 0;
-  backupTree('limpeza de duplicados'); dropNotebooks(extra,true); fixCur(); saveTree(); return extra.length;
-}
 async function backupTree(reason){ try{ const list=(await idb.get('treebak'))||[]; list.unshift({t:Date.now(),reason,tree:clone(tree)}); await idb.put('treebak',list.slice(0,5)); }catch(_){} }
 function structKey(T){ return JSON.stringify({n:(T.notebooks||[]).map(nb=>[nb.id,nb.name,(nb.sections||[]).map(s=>[s.id,(s.pages||[]).map(p=>p.id)])]),t:(T.trash||[]).map(x=>x.page.id)}); }
 function mergeTrees(L,R){
   const remoteNewer=(R.updatedAt||0)>=(L.updatedAt||0); const base=clone(remoteNewer?R:L), other=remoteNewer?L:R;
   base.notebooks=base.notebooks||[]; base.trash=base.trash||[];
   const dead=new Set(); [...(L.deleted||[]),...(R.deleted||[])].forEach(d=>dead.add(d.id||d));
-  base.notebooks=base.notebooks.filter(nb=>!dead.has(nb.id));
   const seenDel=new Set(); base.deleted=[...(L.deleted||[]),...(R.deleted||[])].filter(d=>{ const k=(d.id||d)+'|'+(d.t||0); if(seenDel.has(k))return false; seenDel.add(k); return true; }).slice(-3000);
   const trashed=new Set(base.trash.map(t=>t.page.id)); (other.trash||[]).forEach(t=>trashed.add(t.page.id));
   const nbMap=new Map(), secMap=new Map(), pageIds=new Set(base.trash.map(t=>t.page.id));
@@ -3096,6 +3066,40 @@ function fixImportedSections(silent){
 const purgeLater=[];
 function offerFixSections(){ if(tree.settings.secFixAsked===2)return; const n=sectionsWithMarkers().length; if(!n)return; toast(`Encontrei ${n} importação(ões) do OneNote com páginas fora das seções certas.`,{label:'Organizar agora',fn:()=>fixImportedSections()}); }
 
+/* ================= Editor: digitação limpa ================= */
+function edCfg(){ const s=tree.settings.editor=tree.settings.editor||{}; if(s.plain==null) s.plain=true; if(s.bubble==null) s.bubble=false; if(s.slash==null) s.slash=true; if(!s.font) s.font='default'; return s; }
+const FMT_TAGS=/^(B|STRONG|I|EM|U|S|STRIKE|DEL|INS|MARK|FONT|SUB|SUP|A|SPAN|CODE)$/;
+const isFmtInline=el=>el&&el.nodeType===1&&FMT_TAGS.test(el.tagName)&&!el.classList.contains('mention')&&el.getAttribute('contenteditable')!=='false';
+function plainBeforeInput(e){
+  if(!edCfg().plain||e.inputType!=='insertText'||!e.data)return;
+  const s=getSelection(); if(!s.rangeCount)return; const r=s.getRangeAt(0); if(!editor.contains(r.startContainer))return;
+  const blk=blockOf(r.startContainer); if(!blk||blk.tagName==='PRE')return;
+  let n=r.startContainer.nodeType===3?r.startContainer.parentNode:r.startContainer, F=null;
+  while(n&&n!==blk&&n!==editor){ if(isFmtInline(n)) F=n; n=n.parentNode; }
+  if(!F||!r.collapsed)return;
+  const toEnd=document.createRange(); toEnd.setStart(r.startContainer,r.startOffset); toEnd.setEnd(F,F.childNodes.length);
+  const fromStart=document.createRange(); fromStart.setStart(F,0); fromStart.setEnd(r.startContainer,r.startOffset);
+  const atEnd=!toEnd.toString().length, atStart=!fromStart.toString().length&&F.textContent.length>0;
+  if(!atEnd&&!atStart)return; /* no meio de um trecho formatado: mantém, para não picotar correções */
+  e.preventDefault();
+  const tn=document.createTextNode(/^ +$/.test(e.data)?e.data.replace(/ /g,'\u00A0'):e.data);
+  if(atEnd) F.after(tn); else F.before(tn);
+  const c=document.createRange(); c.setStart(tn,tn.length); c.collapse(true); s.removeAllRanges(); s.addRange(c); lastRange=c.cloneRange(); onEdit();
+}
+function insertPlainText(t){ t=String(t||'').replace(/\r\n?/g,'\n'); const lines=t.split('\n');
+  if(lines.length===1){ document.execCommand('insertText',false,t); return }
+  const html=lines.map(l=>`<p>${l?esc(l).replace(/\t/g,'&emsp;'):'<br>'}</p>`).join(''); document.execCommand('insertHTML',false,html); }
+function stripFormatting(root){
+  [...root.querySelectorAll('*')].forEach(el=>{ if(el.hasAttribute('style')&&!el.closest('.audio,.sync,.kanban')) el.removeAttribute('style'); if(el.tagName==='FONT') el.removeAttribute('color'); });
+  let changed=true; while(changed){ changed=false; root.querySelectorAll('b,strong,i,em,u,s,strike,del,ins,mark,font,sub,sup,span').forEach(el=>{ if(el.classList.contains('mention')||el.closest('.audio,.sync')||el.getAttribute('contenteditable')==='false')return; el.replaceWith(...el.childNodes); changed=true; }); }
+  root.normalize(); }
+async function clearPageFormatting(pid){
+  if(!canEditPage(pid))return; if(tree.cur.page===pid) flushEditor(); await snapshotVersion(pid,true,'antes de remover a formatação');
+  const d=getPage(pid); const box=document.createElement('div'); box.innerHTML=d.html||''; stripFormatting(box); d.html=box.innerHTML||'<p><br></p>'; savePage(pid);
+  if(tree.cur.page===pid&&tree.cur.view==='page'){ editDirty=false; renderEditor(); }
+  toast('Formatação removida: sem negrito, itálico, cores, marca-texto e fontes. A versão anterior ficou no histórico.',{label:'Desfazer',fn:()=>versionsDialog(pid)});
+}
+
 /* ================= Configurações ================= */
 async function storageInfo(){ try{ const e=await navigator.storage.estimate(); return e; }catch(_){ return null; } }
 async function clearAppCache(){
@@ -3125,6 +3129,12 @@ async function settingsDialog(){
     <div class="setsec"><h3>🎨 Aparência</h3><p>Tema e painéis da tela.</p><div class="qbtns">
       <div class="seg" id="stTheme" style="margin:0">${[['auto','Automático'],['light','Claro'],['dark','Escuro']].map(([v,l])=>`<button type="button" data-th="${v}" class="${th===v?'on':''}">${l}</button>`).join('')}</div>
       <button class="btn sm" type="button" data-st="rail">${L.norail?'Mostrar':'Ocultar'} menu lateral</button><button class="btn sm" type="button" data-st="pages">${L.nopages?'Mostrar':'Ocultar'} lista de páginas</button></div></div>
+    <div class="setsec"><h3>✍️ Editor</h3><p>Como o texto se comporta ao digitar, colar e selecionar.</p>
+      <label class="chk"><input type="checkbox" data-ed="plain" ${edCfg().plain?'checked':''}><span><b>Digitação limpa</b>, como no Bloco de Notas: o texto novo não herda negrito, cor ou marca-texto, o que você cola entra sem formatação e “#”, “-” e “1.” não viram título ou lista sozinhos.</span></label>
+      <label class="chk"><input type="checkbox" data-ed="bubble" ${edCfg().bubble?'checked':''}><span>Mostrar barra de formatação ao selecionar texto</span></label>
+      <label class="chk"><input type="checkbox" data-ed="slash" ${edCfg().slash?'checked':''}><span>Abrir o menu de comandos ao digitar “/” no começo da linha</span></label>
+      <div class="qbtns" style="margin-top:6px"><span class="mini" style="align-self:center">Fonte do texto:</span><div class="seg" id="stFont" style="margin:0">${[['default','Padrão'],['mono','Monoespaçada (Bloco de Notas)']].map(([v,l])=>`<button type="button" data-font="${v}" class="${edCfg().font===v?'on':''}">${l}</button>`).join('')}</div></div>
+      <p class="mini" style="margin:8px 0 0">Para tirar a formatação de um trecho: selecione e use <kbd>Ctrl</kbd> <kbd>\\</kbd>. Para a página inteira: menu ⋯ da página → Remover formatação da página.</p></div>
     <div class="setsec"><h3>🔐 Conta e segurança</h3><p>${a?`Login ativado para <b>${esc(a.user)}</b>.`:'Nenhum login configurado.'} ${online?'Sincronizando com a sua conta.':'Este aparelho não está sincronizando.'}</p><div class="qbtns">
       <button class="btn sm" type="button" data-st="auth">${a?'Login e senha…':'Criar login e senha…'}</button><button class="btn sm" type="button" data-st="sync">Sincronização…</button>${window.cadernoAccount?'<button class="btn sm" type="button" data-st="account">Conta online…</button>':''}</div></div>
     <div class="setsec"><h3>🧹 Cache e armazenamento</h3>
@@ -3134,6 +3144,8 @@ async function settingsDialog(){
       <p class="mini" style="margin:10px 0 0">O navegador não deixa um site apagar o cache de outros sites. Para limpar tudo no Chrome: menu ⋮ → Excluir dados de navegação.</p></div>`,
     actions:[{label:'Fechar',primary:true}],
     onOpen:()=>{ $('.dialog').classList.add('wide');
+      $('.dialog').addEventListener('change',e=>{ const c=e.target.closest('[data-ed]'); if(!c)return; edCfg()[c.dataset.ed]=c.checked; saveTree(); if(c.dataset.ed==='bubble'&&!c.checked) hideBubble(); toast('Preferência do editor salva.'); });
+      $('#stFont').addEventListener('click',e=>{ const b=e.target.closest('[data-font]'); if(!b)return; edCfg().font=b.dataset.font; saveTree(); $$('#stFont button').forEach(x=>x.classList.toggle('on',x===b)); if(editor) editor.classList.toggle('mono',edCfg().font==='mono'); });
       $('#stTheme').addEventListener('click',e=>{ const b=e.target.closest('[data-th]'); if(!b)return; tree.settings.theme=b.dataset.th; applyTheme(); saveTree(); $$('#stTheme button').forEach(x=>x.classList.toggle('on',x===b)); });
       $('.dialog').addEventListener('click',async e=>{ const b=e.target.closest('[data-st]'); if(!b)return; const act=b.dataset.st;
         if(act==='rail'||act==='pages'){ toggleLayout(act==='rail'?'norail':'nopages'); b.textContent=(layoutCfg()[act==='rail'?'norail':'nopages']?'Mostrar ':'Ocultar ')+(act==='rail'?'menu lateral':'lista de páginas'); return }
@@ -4412,6 +4424,7 @@ document.addEventListener('keydown',e=>{
   const mod=e.ctrlKey||e.metaKey;
   if(mod&&e.shiftKey&&(e.key==='l'||e.key==='L')&&authCfg()){ e.preventDefault(); lockNow(false); return }
   if(mod&&(e.key==='k'||e.key==='K')){e.preventDefault();openPalette();return}
+  if(mod&&e.key==='\\'&&editor&&editor.contains(document.activeElement===editor?editor:document.activeElement)){ e.preventDefault(); document.execCommand('removeFormat'); document.execCommand('unlink'); onEdit(); return }
   if(e.ctrlKey&&e.altKey&&!e.metaKey&&e.code==='KeyM'){ e.preventDefault(); toggleLayout('norail'); return }
   if(e.ctrlKey&&e.altKey&&!e.metaKey&&e.code==='KeyP'){ e.preventDefault(); toggleLayout('nopages'); return }
   if(mod&&!e.shiftKey&&(e.key==='s'||e.key==='S')){ e.preventDefault(); const p=tree.cur.view==='page'&&curPage(); if(p&&canEditPage(p.id)) saveNamedVersion(p.id,''); return }
