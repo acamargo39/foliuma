@@ -980,6 +980,34 @@ body:has(.ai.show) .fab,body:has(.overlay.show) .fab,body:has(.recorder.show) .f
 }
 @media (prefers-reduced-motion:reduce){*,*::before{transition:none !important;animation:none !important}}
 @media print{.rail,.topbar,.pages,.toolbar,.foot{display:none !important}.app,.work{display:block;padding:0}body{overflow:visible}.main{border:0;box-shadow:none}}
+
+/* ---------- Cabeçalho da página compacto ---------- */
+.toolbar{top:6px;padding:2px 3px;border-radius:10px;gap:0}
+.toolbar .sep{height:16px;margin:0 2px}
+.tb{height:26px;min-width:26px;padding:0 5px;border-radius:7px;gap:3px}
+.tb svg.i{width:15px;height:15px}
+.tb.label{font-size:12px}
+.tb .sw{width:11px;height:2px;bottom:4px}
+.toolbar select{height:24px;font-size:12px}
+.sheet{padding-top:48px}
+.picon{font-size:34px;margin:0 0 2px -4px}
+.has-cover .picon{margin-top:-40px}
+.paddons{margin:0 0 2px -8px}
+.paddons .ghost{padding:2px 6px;font-size:12px}
+.ptitle{font-size:25px;letter-spacing:-.02em;line-height:1.2;padding:0}
+.props{gap:4px;margin:5px 0 0}
+.prop{height:24px;padding:0 2px 0 6px;gap:3px;border-radius:6px;font-size:11.5px}
+.prop svg.i{width:11px;height:11px}
+.prop input,.prop select{height:20px;font-size:12px;padding:0 3px;border-radius:4px}
+.prop input[type=date]{width:106px}
+.prop input[type=checkbox]{width:13px;height:13px}
+.prop input.ptext{width:92px;cursor:text;font-weight:550}
+.prop input.ptext::placeholder{color:var(--faint);font-weight:400}
+.props .chip{font-size:11px;padding:2px 7px}
+.pclear{font-size:11.5px}
+.pmeta{font-size:11.5px;gap:3px 10px;padding:5px 0 8px;margin-bottom:12px}
+.pmeta .cmbtn{padding:1px 7px;font-size:11px}
+@media (max-width:760px){ .sheet{padding-top:44px} .ptitle{font-size:22px} }
 </style>
 </head>
 <body>
@@ -3909,6 +3937,8 @@ function propsHTML(p,ro){
     <label class="prop" title="Repetição"><span>↻</span><select data-prop="repeat" ${dis}>${REPEAT_OPTS.map(([v,l])=>`<option value="${v}" ${(p.repeat||'')===v?'selected':''}>${l}</option>`).join('')}</select></label>
     <button class="prop pbtn" type="button" data-prop-deps="1" ${dis} title="Esta página só pode começar depois de outras">🔗 ${(p.deps||[]).length?`Depende de ${(p.deps||[]).length}`:'Dependências'}</button>
     <label class="prop" title="Marco: uma entrega numa data, sem duração"><input type="checkbox" data-prop="milestone" ${p.milestone?'checked':''} ${dis}><span>◆ Marco</span></label>
+    <label class="prop" title="Request (ex.: número da requisição de transporte)"><span>📦 Request</span><input type="text" class="ptext" data-prop="request" value="${esc(p.request||'')}" placeholder="—" maxlength="60" autocomplete="off" ${dis}></label>
+    <label class="prop" title="Número do chamado"><span>🎫 Chamado</span><input type="text" class="ptext" data-prop="chamado" value="${esc(p.chamado||'')}" placeholder="—" maxlength="60" autocomplete="off" ${dis}></label>
     ${(()=>{ const bl=pageBlockers(p); return bl.length?`<span class="chip late" title="Aguardando: ${esc(bl.map(x=>x.page.title||'Sem título').join(', '))}">🔒 Bloqueada por ${bl.length}</span>`:''; })()}
     ${prog}${ctrl}${!ro&&(p.start||p.end||p.status)?`<button class="pclear" data-prop-clear="1" title="Limpar status e datas">Limpar</button>`:''}</div>`;
 }
@@ -3918,10 +3948,12 @@ edwrap.addEventListener('change',e=>{ const el=e.target.closest('[data-prop]'); 
   if(k==='status'){ applyPageStatus(p,v); const bl=pageBlockers(p); if((v==='doing'||v==='done')&&bl.length) setTimeout(()=>toast(`Atenção: esta página depende de “${bl[0].page.title||'Sem título'}”, que ainda não foi concluída.`),80); }
   else if(k==='repeat'){ if(v){ p.repeat=v; if(!p.start&&!p.end) p.end=dayKey(new Date()); if(!p.status) applyPageStatus(p,'todo'); } else delete p.repeat; }
   else if(k==='milestone'){ if(v) p.milestone=true; else delete p.milestone; }
+  else if(k==='request'||k==='chamado'){ const t=(v||'').trim(); if(t) p[k]=t; else delete p[k]; }
   else { p[k]=v; if(!v) delete p[k]; if(p.start&&p.end&&p.end<p.start){ [p.start,p.end]=[p.end,p.start]; toast('O fim era antes do início, então troquei as datas.'); } if(k==='start'&&v&&!p.status) applyPageStatus(p,'todo'); if(k==='end'&&v&&!p.status) applyPageStatus(p,'todo'); }
   p.updated=Date.now(); commit(f.nb); refreshProps(); renderPagesLight(); renderRailLight();
   if(k==='status'&&v==='done') toast(`Concluída${p.startedAt?' em '+fmtSpan(p.doneAt-p.startedAt):''}.`);
 });
+edwrap.addEventListener('keydown',e=>{ const t=e.target; if(t.classList&&t.classList.contains('ptext')&&e.key==='Enter'){ e.preventDefault(); t.blur(); } });
 edwrap.addEventListener('click',e=>{ if(!e.target.closest('[data-prop-clear]'))return; const p=curPage(); if(!p||!canEditPage(p.id))return; ['status','start','end','startedAt','doneAt','repeat','deps','milestone'].forEach(k=>delete p[k]); p.updated=Date.now(); commit(findPage(p.id).nb); refreshProps(); renderPagesLight(); renderRailLight(); });
 function setPageStatus(pid,status){ const f=findPage(pid); if(!f)return; if(!canEditPage(pid)){toast('Você tem acesso somente de leitura a essa página.');return}
   const was=actState(f.page).done; applyPageStatus(f.page,status); { const bl=pageBlockers(f.page); if((status==='doing'||status==='done')&&bl.length) setTimeout(()=>toast(`Atenção: depende de “${bl[0].page.title||'Sem título'}”, ainda não concluída.`),80); } f.page.updated=Date.now(); commit(f.nb); renderRailLight();
@@ -4237,7 +4269,7 @@ function openPalette(){
     if(s.startsWith('#')){ const tq=s.slice(1); TAGS.filter(t=>norm(t.label).includes(tq)).forEach(t=>items.push({kind:'tag',t})); }
     else {
       COMMANDS.filter(c=>!s||norm(c.label).includes(s)).slice(0,s?4:3).forEach(c=>items.push({kind:'cmd',c}));
-      if(s){ allPages().forEach(x=>{ const title=norm(x.page.title); const text=pageText(x.page.id); const nt=norm(text); const ti=title.indexOf(s), bi=nt.indexOf(s);
+      if(s){ allPages().forEach(x=>{ const title=norm(x.page.title); const text=pageText(x.page.id)+(x.page.request?' request '+x.page.request:'')+(x.page.chamado?' chamado '+x.page.chamado:''); const nt=norm(text); const ti=title.indexOf(s), bi=nt.indexOf(s);
           if(ti>-1||bi>-1) items.push({kind:'page',x,score:(ti>-1?100-ti:0)+(bi>-1?10:0),snip:bi>-1?text.slice(Math.max(0,bi-40),bi+s.length+70):text.slice(0,100)}) });
         linksData.list.forEach(l=>{ if(norm(l.desc+' '+l.url).includes(s)) items.push({kind:'link',l,score:4}); });
         items.sort((a,b)=>(a.kind==='cmd'?-1:0)-(b.kind==='cmd'?-1:0)||(b.score||0)-(a.score||0)); }
