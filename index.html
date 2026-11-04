@@ -886,6 +886,10 @@ body:has(.ai.show) .fab,body:has(.overlay.show) .fab,body:has(.recorder.show) .f
 .addcol:hover{border-color:var(--accent);color:var(--accent)}
 .flabel{font-size:11.5px;font-weight:650;color:var(--faint);margin:8px 0 6px;letter-spacing:.04em;text-transform:uppercase}
 .lab{flex:1;font-size:12.5px;color:var(--muted);display:flex;flex-direction:column;gap:4px;min-width:0}
+.cgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 8px;margin-bottom:4px}
+.cgrid .lab{font-size:11px;gap:2px}
+.cgrid .field{height:30px;margin:0;padding:0 7px;font-size:12.5px;border-radius:7px}
+@media (max-width:560px){ .cgrid{grid-template-columns:repeat(2,minmax(0,1fr))} }
 .ctrlbox{border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13.5px;line-height:1.6;background:var(--surface2)}
 .ctrlbox .warn{color:var(--danger)}
 /* timeline */
@@ -2449,16 +2453,15 @@ async function cardModal(cid){
   const r=await modal({title:ro?'Cartão':'Cartão do quadro',body:`<input class="field" id="cT" value="${esc(c0.title)}" placeholder="Título" ${ro?'readonly':''}>
     <textarea class="field" id="cD" rows="3" placeholder="Descrição, links, observações…" style="height:auto;padding:9px 11px;resize:vertical" ${ro?'readonly':''}>${esc(c0.desc||'')}</textarea>
     <div class="flabel">Planejamento</div>
-    <div class="row2"><label class="lab">Início<input class="field" type="date" id="cS" value="${c0.start||''}" ${ro?'disabled':''}></label><label class="lab">Fim (prazo)<input class="field" type="date" id="cE" value="${c0.end||''}" ${ro?'disabled':''}></label></div>
-    <div class="row2"><label class="lab">Coluna<select class="field" id="cC" ${ro?'disabled':''}>${b.columns.map(col=>`<option value="${col.id}" ${col.id===c0.col?'selected':''}>${esc(col.name)}</option>`).join('')}</select></label><label class="lab">Etiqueta<select class="field" id="cG" ${ro?'disabled':''}><option value="">Nenhuma</option>${TAGS.map(t=>`<option value="${esc(t.id)}" ${t.id===c0.tag?'selected':''}>${esc(t.g+' '+t.label)}</option>`).join('')}</select></label></div>
-    <div class="row2"><label class="lab">Repetir<select class="field" id="cR" ${ro?'disabled':''}>${REPEAT_OPTS.map(([v,l])=>`<option value="${v}" ${(c0.repeat||'')===v?'selected':''}>${l}</option>`).join('')}</select></label><label class="lab">Tipo<select class="field" id="cM" ${ro?'disabled':''}><option value="">Tarefa com duração</option><option value="1" ${c0.milestone?'selected':''}>◆ Marco (entrega)</option></select></label></div>
+    <div class="cgrid"><label class="lab">Início<input class="field" type="date" id="cS" value="${c0.start||''}" ${ro?'disabled':''}></label><label class="lab">Fim (prazo)<input class="field" type="date" id="cE" value="${c0.end||''}" ${ro?'disabled':''}></label><label class="lab">Coluna<select class="field" id="cC" ${ro?'disabled':''}>${b.columns.map(col=>`<option value="${col.id}" ${col.id===c0.col?'selected':''}>${esc(col.name)}</option>`).join('')}</select></label><label class="lab">Etiqueta<select class="field" id="cG" ${ro?'disabled':''}><option value="">Nenhuma</option>${TAGS.map(t=>`<option value="${esc(t.id)}" ${t.id===c0.tag?'selected':''}>${esc(t.g+' '+t.label)}</option>`).join('')}</select></label>
+      <label class="lab">Repetir<select class="field" id="cR" ${ro?'disabled':''}>${REPEAT_OPTS.map(([v,l])=>`<option value="${v}" ${(c0.repeat||'')===v?'selected':''}>${l}</option>`).join('')}</select></label><label class="lab">Tipo<select class="field" id="cM" ${ro?'disabled':''}><option value="">Tarefa com duração</option><option value="1" ${c0.milestone?'selected':''}>◆ Marco (entrega)</option></select></label><label class="lab">Request<input class="field" id="cRq" value="${esc(c0.request||'')}" placeholder="Nº do request" ${ro?'readonly':''}></label><label class="lab">Chamado<input class="field" id="cCh" value="${esc(c0.ticket||'')}" placeholder="Nº do chamado" ${ro?'readonly':''}></label></div>
     <div class="flabel">Depende de</div><div class="deplist" id="cDeps">${b.cards.filter(x=>x.id!==cid).map(x=>`<label class="chk"><input type="checkbox" value="${x.id}" ${(c0.deps||[]).includes(x.id)?'checked':''} ${ro?'disabled':''}><span>${esc(x.title)}${cardState(x,b).done?' <span class="mini">(concluído)</span>':''}</span></label>`).join('')||'<span class="mini">Não há outros cartões neste quadro.</span>'}</div>
     <div class="flabel">Responsáveis</div><div class="assg"><div class="chips" id="assChips"></div>${ro?'':`<div class="row2" style="align-items:center"><input class="field" id="assQ" autocomplete="off" placeholder="${userApi?'Buscar pessoa da organização ou digitar um nome':'Digite um nome e aperte Enter'}" style="margin:0">${viewerId?`<button class="btn sm" id="assMe" type="button">Atribuir a mim</button>`:''}</div><div class="assres" id="assRes"></div>`}</div>
     <div class="flabel">Checklist</div><div id="clSlot"></div>
     <div class="flabel">Tempo trabalhado</div><div id="workSlot"></div>
     <div class="flabel">Controle de início e fim</div><div id="ctrlSlot">${ctrlHTML()}</div>`,
     actions:ro?[{label:'Fechar',primary:true}]:[{label:'Excluir',danger:true,value:'del'},{label:'Duplicar',value:'dup'},{label:'Cancelar'},{label:'Salvar',primary:true,value:'ok'}],focus:ro?null:'#cT',
-    collect:()=>({title:$('#cT').value.trim(),desc:$('#cD').value,start:$('#cS').value||null,end:$('#cE').value||null,col:$('#cC').value,tag:$('#cG').value||null,assignees:people,checklist:items,repeat:$('#cR').value||null,milestone:$('#cM').value==='1',deps:$$('#cDeps input:checked').map(x=>x.value)}),
+    collect:()=>({title:$('#cT').value.trim(),desc:$('#cD').value,start:$('#cS').value||null,end:$('#cE').value||null,col:$('#cC').value,tag:$('#cG').value||null,assignees:people,checklist:items,repeat:$('#cR').value||null,milestone:$('#cM').value==='1',request:$('#cRq').value.trim()||null,ticket:$('#cCh').value.trim()||null,deps:$$('#cDeps input:checked').map(x=>x.value)}),
     onOpen:()=>{ assigneeUI(people,ro); checklistUI(items,ro);
       const syncFromData=()=>{ const cc=boardData(pid).cards.find(x=>x.id===cid); if(!cc)return; st.startedAt=cc.startedAt||null; st.doneAt=cc.doneAt||null; $('#cC').value=cc.col; touched=true; $('#ctrlSlot').innerHTML=ctrlHTML(); };
       workUI(pid,cid,ro,syncFromData); $('#ctrlSlot').addEventListener('click',e=>{ const bt=e.target.closest('[data-c]'); if(!bt)return; e.stopPropagation(); touched=true; const now=Date.now(); const cols=b.columns; const cur=cols.find(x=>x.id===$('#cC').value);
@@ -2474,7 +2477,7 @@ async function cardModal(cid){
   if(r.value!=='ok'&&r.value!=='dup'){ renderBoardBody(); return }
   let {start,end}=r.data; if(start&&end&&end<start){ [start,end]=[end,start]; toast('O fim era antes do início, então troquei as datas.'); }
   Object.assign(c,{title:r.data.title||c.title,desc:r.data.desc,start,end,tag:r.data.tag,assignees:r.data.assignees,checklist:r.data.checklist.filter(x=>x.t.trim()),deps:r.data.deps});
-  if(r.data.repeat){ c.repeat=r.data.repeat; if(!c.start&&!c.end)c.end=dayKey(new Date()); } else delete c.repeat; if(r.data.milestone)c.milestone=true; else delete c.milestone;
+  if(r.data.repeat){ c.repeat=r.data.repeat; if(!c.start&&!c.end)c.end=dayKey(new Date()); } else delete c.repeat; if(r.data.milestone)c.milestone=true; else delete c.milestone; if(r.data.request)c.request=r.data.request; else delete c.request; if(r.data.ticket)c.ticket=r.data.ticket; else delete c.ticket;
   const colChanged=r.data.col!==c.col;
   if(touched){ c.startedAt=st.startedAt; c.doneAt=st.doneAt; c.col=r.data.col; } else if(colChanged) applyRole(c,b,r.data.col);
   if(colChanged){ b.cards.splice(i,1); let last=-1; b.cards.forEach((x,k)=>{if(x.col===c.col)last=k}); b.cards.splice(last<0?b.cards.length:last+1,0,c); }
