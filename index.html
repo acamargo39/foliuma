@@ -1598,7 +1598,6 @@ function renderEditor(){
     <div class="sheet paper-${data.paper||'plain'}" id="sheet">
     <div class="phead">
       ${p.icon?`<button class="picon" data-act="icon" title="Trocar ícone">${esc(p.icon)}</button>`:''}
-      ${ro?'':`<div class="paddons">${p.icon?'':`<button class="ghost" data-act="icon">${icon('smile')}Adicionar ícone</button>`}${cov?'':`<button class="ghost" data-act="cover">${icon('image')}Adicionar capa</button>`}</div>`}
       <input class="ptitle" id="ptitle" placeholder="Sem título" value="${esc(p.title)}" aria-label="Título da página" ${ro?'readonly':''}>${propsHTML(p,ro)}
     </div>
     <div class="pmeta"><span>${fmtDate(p.created)}</span><span id="pUpd">Editado ${fmtRel(p.updated||p.created)}</span><span>${esc(nb.name)} › ${esc(s.name)}</span>${nb.shared?`<span class="sharedchip">${icon('users')}Compartilhado</span>`:''}<button class="cmbtn" data-hist="1" type="button" title="Histórico de versões (Ctrl S salva uma versão)">🕘 <span class="vercount">Histórico</span></button><button class="cmbtn" data-cm="1" type="button" title="Comentários">💬 <span class="cmcount"></span></button><span class="facepile" id="facepile"></span></div>
@@ -2380,7 +2379,6 @@ function renderBoard(p,data,nb,s,ro,cov){
     ${cov?`<div class="cover" style="background:${cov}"><div class="coveract"><button class="chipbtn" data-act="cover">${icon('image')}Trocar capa</button><button class="chipbtn" data-act="rmcover">Remover</button></div></div>`:''}
     <div class="bhead"><div class="phead">
       ${p.icon?`<button class="picon" data-act="icon" title="Trocar ícone">${esc(p.icon)}</button>`:''}
-      ${ro?'':`<div class="paddons">${p.icon?'':`<button class="ghost" data-act="icon">${icon('smile')}Adicionar ícone</button>`}${cov?'':`<button class="ghost" data-act="cover">${icon('image')}Adicionar capa</button>`}</div>`}
       <input class="ptitle" id="ptitle" placeholder="Sem título" value="${esc(p.title)}" aria-label="Título do quadro" ${ro?'readonly':''}>${propsHTML(p,ro)}
     </div>
     <div class="pmeta"><span>Quadro Kanban</span><span id="pUpd">Editado ${fmtRel(p.updated||p.created)}</span><span>${esc(nb.name)} › ${esc(s.name)}</span>${nb.shared?`<span class="sharedchip">${icon('users')}Compartilhado</span>`:''}<button class="cmbtn" data-hist="1" type="button" title="Histórico de versões (Ctrl S salva uma versão)">🕘 <span class="vercount">Histórico</span></button><button class="cmbtn" data-cm="1" type="button" title="Comentários">💬 <span class="cmcount"></span></button><span class="facepile" id="facepile"></span></div>
@@ -2394,7 +2392,7 @@ function renderBoard(p,data,nb,s,ro,cov){
   $('#bmode').onclick=e=>{const b=e.target.closest('[data-m]');if(!b)return;boardMode=b.dataset.m;$$('#bmode button').forEach(x=>x.classList.toggle('on',x===b));renderBoardBody()};
   $('#bq').addEventListener('input',e=>{boardQuery=e.target.value;renderBoardBody()});
   $('#bwho').addEventListener('change',e=>{boardWho=e.target.value;renderBoardBody()});
-  $('#bmore').onclick=e=>{const cp=curPage();showMenu(e.currentTarget,[{label:'Exportar quadro (PDF)',icon:'down',disabled:!downloads,action:()=>exportPdf('page',cp.id)},{label:'Exportar quadro (.md)',icon:'down',disabled:!downloads,action:()=>saveFile(safeName(cp.title)+'.md',pageMd(cp))},{label:'Copiar como Markdown',icon:'pages',action:async()=>{try{await navigator.clipboard.writeText(pageMd(cp));toast('Markdown copiado.')}catch(_){toast('Não foi possível copiar.')}}}])};
+  $('#bmore').onclick=e=>{const cp=curPage(); const an=e.currentTarget; const canEd=cp&&canEditPage(cp.id); const hasCov=cp&&cp.cover!=null&&cp.cover!==false;showMenu(an,[...(canEd?[{label:cp.icon?'Trocar ícone':'Adicionar ícone',icon:'smile',action:()=>setTimeout(()=>headPicker('icon',an),0)},{label:hasCov?'Trocar capa':'Adicionar capa',icon:'image',action:()=>setTimeout(()=>headPicker('cover',an),0)},...(hasCov?[{label:'Remover capa',icon:'trash',action:()=>headPicker('rmcover',an)}]:[]),{sep:true}]:[]),{label:'Exportar quadro (PDF)',icon:'down',disabled:!downloads,action:()=>exportPdf('page',cp.id)},{label:'Exportar quadro (.md)',icon:'down',disabled:!downloads,action:()=>saveFile(safeName(cp.title)+'.md',pageMd(cp))},{label:'Copiar como Markdown',icon:'pages',action:async()=>{try{await navigator.clipboard.writeText(pageMd(cp));toast('Markdown copiado.')}catch(_){toast('Não foi possível copiar.')}}}])};
   bindBoard(ro); renderBoardBody(); renderFacepile(); snapshotVersion(p.id,false,'quadro aberto').then(()=>updateVerCount(p.id));
 }
 function renderBoardBody(){
@@ -4312,9 +4310,14 @@ function pageMd(p){ const pd=getPage(p.id);
   const d=document.createElement('div'); d.innerHTML=getPage(p.id).html; return '# '+(p.icon?p.icon+' ':'')+(p.title||'Sem título')+'\n\n'+htmlToMd(d); }
 function safeName(s){return (s||'pagina').replace(/[\\/:*?"<>|]+/g,'').trim().slice(0,80)||'pagina'}
 async function saveFile(name,data){ if(!downloads){toast('Download indisponível aqui. Use “Copiar como Markdown”.');return} try{ await downloads.save({filename:name,data}); }catch(e){ const c=e&&e.code; if(c==='unavailable')toast('Download indisponível nesta visualização.'); else if(c&&!/declin|cancel/.test(c)) toast('O arquivo não foi salvo.'); } }
+function headPicker(kind,anchor){ const old=anchor.dataset.act; anchor.dataset.act=kind; try{ onHeadAct({target:anchor,stopPropagation(){}}); }finally{ anchor.dataset.act=old; } }
 function exportMenu(anchor){
-  const p=curPage();
+  const p=curPage(); const canEd=p&&canEditPage(p.id); const hasCov=p&&p.cover!=null&&p.cover!==false;
   showMenu(anchor,[
+    ...(canEd?[{label:p.icon?'Trocar ícone':'Adicionar ícone',icon:'smile',action:()=>setTimeout(()=>headPicker('icon',anchor),0)},
+      {label:hasCov?'Trocar capa':'Adicionar capa',icon:'image',action:()=>setTimeout(()=>headPicker('cover',anchor),0)},
+      ...(hasCov?[{label:'Remover capa',icon:'trash',action:()=>headPicker('rmcover',anchor)}]:[]),
+      {sep:true}]:[]),
     {label:'Exportar página (PDF)',icon:'down',disabled:!downloads,action:()=>exportPdf('page',p.id)},
     {label:'Histórico de versões…',icon:'clock',action:()=>versionsDialog(p.id)},
     {label:'Salvar como modelo…',icon:'tpl',action:()=>saveAsTemplate(p.id)},
